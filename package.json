@@ -20,11 +20,11 @@
   },
   "dependencies": {
     "@azure/msal-node": "^6.0.0",
-    "@azure/msal-node-extensions": "^5.4.0",
+    "@azure/msal-node-extensions": "^5.5.0",
     "@modelcontextprotocol/node": "^2.0.0",
     "@modelcontextprotocol/server": "^2.0.0",
     "jose": "^6.2.10",
-    "zod": "^4.2.0"
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
