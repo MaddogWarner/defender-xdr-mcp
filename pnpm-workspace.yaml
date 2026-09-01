@@ -1,0 +1,9 @@
+packages:
+  - '.'
+
+verifyDepsBeforeRun: false
+
+allowBuilds:
+  '@azure/msal-node-extensions': true
+  esbuild: true
+  keytar: true

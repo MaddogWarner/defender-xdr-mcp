@@ -1,0 +1,41 @@
+{
+  "name": "defender-xdr-mcp",
+  "version": "1.0.0",
+  "description": "Strictly read-only MCP server for Microsoft Defender XDR",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@11.24.0",
+  "scripts": {
+    "dev": "tsx src/index.ts --dev-auth-smoke",
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint . && prettier --check .",
+    "format": "prettier --write .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@azure/msal-node": "^5.4.3",
+    "@azure/msal-node-extensions": "^5.4.0",
+    "@modelcontextprotocol/node": "^2.0.0",
+    "@modelcontextprotocol/server": "^2.0.0",
+    "jose": "^6.2.10",
+    "zod": "^4.2.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@types/node": "^24.0.0",
+    "@vitest/coverage-v8": "^4.1.10",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^10.0.0",
+    "prettier": "^3.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^6.0.0",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^4.1.10"
+  }
+}

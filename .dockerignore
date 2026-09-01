@@ -1,0 +1,12 @@
+node_modules
+dist
+.pnpm-store
+.git
+.github
+.env*
+.DS_Store
+*.md
+audit.jsonl
+audit.jsonl.*
+sbom.cdx.json
+coverage

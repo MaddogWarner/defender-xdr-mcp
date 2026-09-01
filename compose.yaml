@@ -1,0 +1,31 @@
+# Shared-team deployment (HTTP mode). Put a TLS reverse proxy (Caddy, nginx,
+# Traefik) in front — the port below is published on loopback deliberately.
+services:
+  defender-xdr-mcp:
+    build: .
+    image: defender-xdr-mcp:latest
+    restart: unless-stopped
+    # .env must include DXM_PUBLIC_URL=https://<public-proxy-origin> as well
+    # as the tenant, client, and confidential credential values.
+    env_file: .env # never commit this file
+    environment:
+      DXM_TRANSPORT: http
+      DXM_HTTP_HOST: 0.0.0.0 # inside the container only; host publish stays loopback
+      DXM_AUDIT_LOG_PATH: /audit/audit.jsonl
+    ports:
+      - '127.0.0.1:3020:3020'
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      - audit:/audit
+      # Using certificate auth for OBO instead of a client secret? Mount it
+      # read-only and set DXM_CLIENT_CERT_PATH=/certs/obo.pem in .env:
+      # - ./certs:/certs:ro
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  audit:

@@ -1,0 +1,38 @@
+name: Release
+
+# Runs when a version tag is pushed (Phase 6, David-gated).
+# Builds, generates the CycloneDX SBOM from the lockfile, and attaches
+# both the build artefact and SBOM to the GitHub release.
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint && pnpm typecheck && pnpm test
+      - run: pnpm build
+      - name: Generate SBOM (CycloneDX)
+        run: pnpm sbom --sbom-format cyclonedx --out sbom.cdx.json
+      - name: Package build artefact
+        # Lockfile included so the artefact is reproducible via
+        # `pnpm install --prod --frozen-lockfile`.
+        run: tar -czf defender-xdr-mcp-${{ github.ref_name }}.tar.gz dist package.json pnpm-lock.yaml README.md LICENSE
+      - uses: softprops/action-gh-release@v3
+        with:
+          generate_release_notes: true
+          files: |
+            sbom.cdx.json
+            defender-xdr-mcp-${{ github.ref_name }}.tar.gz
