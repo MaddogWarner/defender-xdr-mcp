@@ -210,6 +210,35 @@ Gate: full standard gate plus `pnpm test:coverage`. Guardrail coverage must not 
 
 ---
 
+## Step 9 — Post-v1.0.0 defect: keystore dependency loaded in HTTP mode (Claude, 02/09/2026)
+
+**Severity: high. The container cannot start.** Found by CI on `ubuntu-latest` immediately after the first public push, not by any local gate — this is precisely the class of defect the deferred Docker gate exists to catch.
+
+`@azure/msal-node-extensions` loads `keytar` at **module-import time**, and `keytar` needs `libsecret-1.so.0` on Linux. The built output has an unbroken chain of **value** imports from the HTTP entry point to that package:
+
+```text
+dist/http.js → auth/obo.js → auth/msal.js → auth/tokenCache.js → @azure/msal-node-extensions → keytar → libsecret
+```
+
+`obo.ts` imports `GRAPH_SCOPES` and `MDE_TOKEN_SCOPES` from `msal.ts` as values, and `msal.ts` imports `createEncryptedCachePlugin` from `tokenCache.ts` as a value. Because the failure happens at import, the `try`/`catch` inside `createEncryptedCachePlugin` never runs — it cannot rescue this.
+
+Consequence: the `node:24-alpine` image has no libsecret and the Dockerfile bakes `DXM_TRANSPORT=http`, so the container crashes on startup. HTTP mode has no use for an OS keystore at all — on-behalf-of tokens are held in memory only.
+
+**Required fix — remove the dependency from the HTTP path; do not paper over it by installing libsecret in the image.**
+
+- Move `GRAPH_SCOPES`, `MDE_TOKEN_SCOPES` and any other keystore-independent constants out of `msal.ts` into a new dependency-free module (`src/auth/scopes.ts`). Update `obo.ts`, `msal.ts` and all other importers.
+- Load `tokenCache.js` lazily: replace the static import in `msal.ts` with a dynamic `await import('./tokenCache.js')` inside the device-code path that actually needs it, so the keystore package is only touched in stdio mode.
+- Leave the existing thrown-error message in `createEncryptedCachePlugin` as is. It correctly tells a Linux stdio user to install libsecret, and that requirement is real and unchanged.
+
+**Regression tests (must fail before the fix, pass after):**
+
+- Assert the HTTP entry point's transitive import graph does **not** include `@azure/msal-node-extensions` — walk the built `dist/` import graph, or spawn a child process with a stub that throws if the module is loaded. A test that merely imports `http.js` on macOS proves nothing, because Keychain works there.
+- Assert stdio mode still reaches the encrypted cache and still refuses a plaintext fallback.
+
+**Also note:** `.github/workflows/ci.yml` now installs `libsecret-1-0` on the Linux runner (commit `7d92729`). That was needed to make the test suite runnable on CI at all and is **not** a fix for this defect. Keep it after the fix lands — stdio tests still exercise the keystore path.
+
+Gate: standard gate plus `pnpm test:coverage`. The Docker build/run gate remains **DEFERRED** and this defect is a strong reason to run it before any trial.
+
 ## Out of scope (do not build)
 
 Secure Score tools; any write/response action; app-only auth; multi-tenant support; a web UI; metrics/telemetry emission from the server itself; npm publishing (decided at Phase 6).

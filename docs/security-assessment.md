@@ -259,6 +259,7 @@ If you proceed to a trial, these are the conditions the evidence supports:
 
 Carried forward honestly rather than closed off:
 
+- **Open defect (high) — the container cannot currently start.** `@azure/msal-node-extensions` loads `keytar` at module-import time, which requires `libsecret` on Linux, and the HTTP entry point reaches that package through an unbroken chain of value imports. The `node:24-alpine` image has no `libsecret`, so the containerised deployment fails at startup. Local stdio mode on macOS and Windows is unaffected. Fix specified in `codex-plan.md` Step 9; **shared-mode deployment is blocked until it lands.** This defect was found by CI on a Linux runner within minutes of first publication — it is a concrete illustration of why R2 is rated as it is, and why the container gate must be run rather than assumed.
 - Live tenant and container gates outstanding (R2).
 - No independent security review (R5).
 - Audit file permissions are repaired to `0600` on every write, which will conflict with a deployment deliberately using group-readable log files for a shipping agent.
