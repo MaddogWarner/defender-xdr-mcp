@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { ResourceInteractionRequiredError } from '../../src/auth/msal.js';
+import { OnBehalfOfExchangeError } from '../../src/auth/obo.js';
 import { ContinuationTokenError } from '../../src/clients/continuationTokens.js';
 import { MicrosoftApiError } from '../../src/clients/http.js';
 import { ToolPipeline, type ToolAuditEntry } from '../../src/tools/pipeline.js';
@@ -148,6 +149,47 @@ describe('ToolPipeline', () => {
       reason:
         'Defender for Endpoint requires interactive sign-in. Call get_connection_status to sign in, then retry.',
     });
+  });
+
+  it('returns and audits an OBO failure raised while validating resource access', async () => {
+    const audit = vi.fn<(_entry: ToolAuditEntry) => Promise<void>>().mockResolvedValue(undefined);
+    const pipeline = new ToolPipeline(() => 'analyst@example.com', audit, shapeConfig);
+    const failure = new OnBehalfOfExchangeError('mde', 'invalid_grant');
+
+    await expect(
+      pipeline.run({
+        tool: 'list_devices',
+        args: {},
+        input: undefined,
+        validate: () => Promise.reject(failure),
+        execute: () => Promise.resolve([]),
+      }),
+    ).resolves.toEqual({ ok: false, reason: failure.message });
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({ error: { code: 'validation_error' }, status: 'error' }),
+    );
+  });
+
+  it('returns and audits an OBO failure raised while executing a tool', async () => {
+    const audit = vi.fn<(_entry: ToolAuditEntry) => Promise<void>>().mockResolvedValue(undefined);
+    const pipeline = new ToolPipeline(() => 'analyst@example.com', audit, shapeConfig);
+    const failure = new OnBehalfOfExchangeError('graph', 'unauthorized_client');
+
+    await expect(
+      pipeline.run({
+        tool: 'list_incidents',
+        args: {},
+        input: undefined,
+        validate: () => ({ ok: true, value: undefined, notices: [] }),
+        execute: () => Promise.reject(failure),
+      }),
+    ).resolves.toEqual({ ok: false, reason: failure.message });
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: { code: 'OnBehalfOfExchangeError' },
+        status: 'error',
+      }),
+    );
   });
 
   it('fails closed when a successful call cannot be audited', async () => {

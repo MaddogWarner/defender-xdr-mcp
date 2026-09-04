@@ -24,6 +24,18 @@ interface CachedToken {
   usableUntilMs: number;
 }
 
+export class OnBehalfOfExchangeError extends Error {
+  readonly resource: TokenResource;
+  readonly errorCode: string;
+
+  constructor(resource: TokenResource, errorCode: string) {
+    super(exchangeFailureMessage(resource, errorCode));
+    this.name = 'OnBehalfOfExchangeError';
+    this.resource = resource;
+    this.errorCode = errorCode;
+  }
+}
+
 export class OboTokenCache {
   readonly #maximumEntries: number;
   readonly #tokens = new Map<string, CachedToken>();
@@ -112,10 +124,6 @@ export class OnBehalfOfAuth implements AuthProvider {
     this.#now = now;
   }
 
-  async prime(): Promise<void> {
-    await Promise.all([this.getToken('graph'), this.getToken('mde')]);
-  }
-
   async getToken(resource: TokenResource): Promise<AccessTokenContext> {
     const key = this.#cacheKey(resource);
     const nowMs = this.#now();
@@ -168,12 +176,17 @@ export class OnBehalfOfAuth implements AuthProvider {
   }
 
   async #acquire(resource: TokenResource, key: string): Promise<AccessTokenContext> {
-    const result = await this.#application.acquireTokenOnBehalfOf({
-      oboAssertion: this.#assertion,
-      scopes: resource === 'graph' ? [...GRAPH_SCOPES] : [...MDE_TOKEN_SCOPES],
-    });
+    let result: AuthenticationResult | null;
+    try {
+      result = await this.#application.acquireTokenOnBehalfOf({
+        oboAssertion: this.#assertion,
+        scopes: resource === 'graph' ? [...GRAPH_SCOPES] : [...MDE_TOKEN_SCOPES],
+      });
+    } catch (error: unknown) {
+      throw new OnBehalfOfExchangeError(resource, oboErrorCode(error));
+    }
     if (result === null) {
-      throw new Error(`Microsoft OBO exchange did not return a token for ${resource}`);
+      throw new OnBehalfOfExchangeError(resource, 'no_token_result');
     }
 
     const context: AccessTokenContext = {
@@ -190,6 +203,31 @@ export class OnBehalfOfAuth implements AuthProvider {
   #cacheKey(resource: TokenResource): string {
     return `${this.#assertionHash}:${resource}`;
   }
+}
+
+function oboErrorCode(error: unknown): string {
+  if (typeof error !== 'object' || error === null) return 'unknown_error';
+  const errorCode = (error as { errorCode?: unknown }).errorCode;
+  return typeof errorCode === 'string' && /^[A-Za-z0-9_.-]{1,128}$/.test(errorCode)
+    ? errorCode
+    : 'unknown_error';
+}
+
+function exchangeFailureMessage(resource: TokenResource, errorCode: string): string {
+  const resourceName = resource === 'graph' ? 'Microsoft Graph' : 'Defender for Endpoint';
+  const permissionApi = resource === 'graph' ? 'Microsoft Graph' : 'WindowsDefenderATP';
+  const prefix = `${resourceName} could not be accessed on your behalf (${errorCode}).`;
+
+  if (errorCode === 'invalid_grant') {
+    return `${prefix} Ask an administrator to confirm the app registration's delegated ${permissionApi} permissions have admin consent, then retry.`;
+  }
+  if (errorCode === 'interaction_required' || errorCode === 'consent_required') {
+    return `${prefix} Ask an administrator to grant consent for the app registration's delegated ${permissionApi} permissions, then retry.`;
+  }
+  if (errorCode === 'unauthorized_client') {
+    return `${prefix} Ask an administrator to confirm the app registration is authorised for delegated ${permissionApi} on-behalf-of access, then retry.`;
+  }
+  return `${prefix} Ask an administrator to review the app registration and Entra sign-in logs, then retry.`;
 }
 
 export class OnBehalfOfAuthFactory {

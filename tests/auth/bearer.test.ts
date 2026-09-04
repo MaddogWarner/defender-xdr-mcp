@@ -6,10 +6,13 @@ import {
   type CryptoKey,
   type JWTVerifyGetKey,
 } from 'jose';
+import type { AuthenticationResult, OnBehalfOfRequest } from '@azure/msal-node';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { EntraTokenVerifier } from '../../src/auth/bearer.js';
 import type { AuthProvider } from '../../src/auth/msal.js';
+import { OboTokenCache, OnBehalfOfAuth } from '../../src/auth/obo.js';
+import { MDE_TOKEN_SCOPES } from '../../src/auth/scopes.js';
 import { ContinuationTokenStore } from '../../src/clients/continuationTokens.js';
 import { loadConfig, type AppConfig } from '../../src/config.js';
 import { DualWindowRateLimiter } from '../../src/guardrails/rateLimiter.js';
@@ -81,14 +84,13 @@ function handler() {
   return { fetch: (request: Request) => http.fetch(request), create };
 }
 
-function authenticatedProvider(): AuthProvider & { prime(): Promise<void> } {
+function authenticatedProvider(): AuthProvider {
   const downstreamToken = {
     accessToken: 'downstream-token',
     grantedScopes: ['Test.Read'],
     expiresOn: new Date(Date.now() + 3600_000),
   };
   return {
-    prime: () => Promise.resolve(),
     getToken: () => Promise.resolve(downstreamToken),
     getTokenSilently: () => Promise.resolve(downstreamToken),
     invalidate: vi.fn(),
@@ -115,7 +117,12 @@ function sharedState(
   };
 }
 
-function toolRequest(bearer: string, id: number, argumentsValue: Record<string, unknown> = {}) {
+function rpcRequest(
+  bearer: string,
+  id: number,
+  method: string,
+  params: Record<string, unknown>,
+): Request {
   return new Request('http://defender.example/mcp', {
     method: 'POST',
     headers: {
@@ -126,10 +133,19 @@ function toolRequest(bearer: string, id: number, argumentsValue: Record<string, 
     body: JSON.stringify({
       jsonrpc: '2.0',
       id,
-      method: 'tools/call',
-      params: { name: 'list_incidents', arguments: argumentsValue },
+      method,
+      params,
     }),
   });
+}
+
+function toolRequest(
+  bearer: string,
+  id: number,
+  argumentsValue: Record<string, unknown> = {},
+  name = 'list_incidents',
+): Request {
+  return rpcRequest(bearer, id, 'tools/call', { name, arguments: argumentsValue });
 }
 
 describe('HTTP Entra bearer validation', () => {
@@ -171,25 +187,12 @@ describe('HTTP Entra bearer validation', () => {
     }
   });
 
-  it('passes validated identity into OBO and serves an MCP initialise request', async () => {
+  it('passes validated identity into OBO without priming downstream resources', async () => {
     const bearer = await token();
-    const downstreamToken = {
-      accessToken: 'downstream-token',
-      grantedScopes: ['Test.Read'],
-      expiresOn: new Date(Date.now() + 3600_000),
-    };
-    const prime = vi.fn(() => Promise.resolve());
-    const auth: AuthProvider & { prime(): Promise<void> } = {
-      prime,
-      getToken: vi.fn(() => Promise.resolve(downstreamToken)),
-      getTokenSilently: vi.fn(() => Promise.resolve(downstreamToken)),
-      invalidate: vi.fn(),
-      hasUsableToken: vi.fn(() => Promise.resolve(true)),
-      getConnectionStatus: () => ({
-        upn: 'analyst@example.com',
-        scopes: { graph: ['Test.Read'], mde: ['Test.Read'] },
-      }),
-    };
+    const auth = authenticatedProvider();
+    const getToken = vi.spyOn(auth, 'getToken');
+    const getTokenSilently = vi.spyOn(auth, 'getTokenSilently');
+    const hasUsableToken = vi.spyOn(auth, 'hasUsableToken');
     const create = vi.fn(() => auth);
     const http = createHttpFetchHandler(config, new EntraTokenVerifier(config, getKey), {
       create,
@@ -217,8 +220,83 @@ describe('HTTP Entra bearer validation', () => {
 
     expect(response.status).toBe(200);
     expect(create).toHaveBeenCalledWith(bearer, 'analyst@example.com', expect.any(Number));
-    expect(prime).toHaveBeenCalledOnce();
+    expect(getToken).not.toHaveBeenCalled();
+    expect(getTokenSilently).not.toHaveBeenCalled();
+    expect(hasUsableToken).not.toHaveBeenCalled();
     await expect(response.text()).resolves.toContain('"name":"defender-xdr-mcp"');
+  });
+
+  it('keeps Graph tools available when an MDE OBO exchange fails', async () => {
+    const bearer = await token();
+    const append = vi.fn(() => Promise.resolve());
+    const cache = new OboTokenCache();
+    const acquireTokenOnBehalfOf = vi
+      .fn<(request: OnBehalfOfRequest) => Promise<AuthenticationResult | null>>()
+      .mockImplementation((request) => {
+        if (request.scopes.includes(MDE_TOKEN_SCOPES[0])) {
+          return Promise.reject(
+            Object.assign(new Error('raw claims challenge with secret material'), {
+              errorCode: 'invalid_grant',
+            }),
+          );
+        }
+        return Promise.resolve({
+          accessToken: 'graph-downstream-token',
+          scopes: [...request.scopes],
+          expiresOn: new Date(Date.now() + 3600_000),
+        } as AuthenticationResult);
+      });
+    const create = vi.fn(
+      (assertion: string, upn: string, inboundExpiresAt: number) =>
+        new OnBehalfOfAuth({ acquireTokenOnBehalfOf }, assertion, upn, inboundExpiresAt, cache),
+    );
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(
+          new Response(JSON.stringify({ value: [{ id: 'incident-1' }] }), { status: 200 }),
+        ),
+    );
+    const http = createHttpFetchHandler(
+      config,
+      new EntraTokenVerifier(config, getKey),
+      { create },
+      sharedState(append),
+    );
+
+    const initialize = await http.fetch(
+      rpcRequest(bearer, 1, 'initialize', {
+        protocolVersion: '2025-11-25',
+        capabilities: {},
+        clientInfo: { name: 'vitest', version: '1.0.0' },
+      }),
+    );
+    const toolsList = await http.fetch(rpcRequest(bearer, 2, 'tools/list', {}));
+    const incidents = await http.fetch(toolRequest(bearer, 3));
+    const devices = await http.fetch(toolRequest(bearer, 4, {}, 'list_devices'));
+
+    expect(initialize.status).toBe(200);
+    expect(toolsList.status).toBe(200);
+    expect(incidents.status).toBe(200);
+    expect(devices.status).toBe(200);
+    await expect(initialize.text()).resolves.toContain('"name":"defender-xdr-mcp"');
+    await expect(toolsList.text()).resolves.toContain('"name":"list_devices"');
+    await expect(incidents.text()).resolves.toContain('incident-1');
+    const deviceBody = await devices.text();
+    expect(deviceBody).toContain('"isError":true');
+    expect(deviceBody).toContain(
+      "Defender for Endpoint could not be accessed on your behalf (invalid_grant). Ask an administrator to confirm the app registration's delegated WindowsDefenderATP permissions have admin consent, then retry.",
+    );
+    expect(acquireTokenOnBehalfOf).toHaveBeenCalledTimes(2);
+    expect(append).toHaveBeenCalledTimes(2);
+    expect(append).toHaveBeenLastCalledWith(
+      expect.objectContaining({ error: { code: 'validation_error' }, status: 'error' }),
+    );
+    const auditEvidence = JSON.stringify(append.mock.calls);
+    expect(auditEvidence).not.toContain(bearer);
+    expect(auditEvidence).not.toContain('graph-downstream-token');
+    expect(auditEvidence).not.toContain('raw claims challenge');
   });
 
   it('serves protected-resource metadata without authentication', async () => {
