@@ -7,7 +7,7 @@ import type { AppConfig } from '../config.js';
 import type { ToolPipeline, ToolValidation } from './pipeline.js';
 
 const MDE_SIGN_IN_REQUIRED =
-  'Defender for Endpoint requires interactive sign-in. Call get_connection_status to sign in, then retry.';
+  'Defender for Endpoint requires interactive sign-in. Run `node dist/index.js --sign-in` in a terminal, or call get_connection_status, then retry.';
 
 interface PageInput {
   top?: number;

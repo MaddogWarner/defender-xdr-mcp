@@ -7,7 +7,7 @@ import type { AppConfig } from '../config.js';
 import type { ToolPipeline, ToolValidation } from './pipeline.js';
 
 const GRAPH_SIGN_IN_REQUIRED =
-  'Microsoft Graph requires interactive sign-in. Call get_connection_status to sign in, then retry.';
+  'Microsoft Graph requires interactive sign-in. Run `node dist/index.js --sign-in` in a terminal, or call get_connection_status, then retry.';
 
 type ListInput = Omit<GraphListFilters, 'top'> & { top: number | undefined };
 

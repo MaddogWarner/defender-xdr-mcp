@@ -46,7 +46,7 @@ export class ResourceInteractionRequiredError extends Error {
 
   constructor(resource: TokenResource) {
     super(
-      `${resource === 'graph' ? 'Microsoft Graph' : 'Defender for Endpoint'} requires interactive sign-in. Call get_connection_status to sign in, then retry.`,
+      `${resource === 'graph' ? 'Microsoft Graph' : 'Defender for Endpoint'} requires interactive sign-in. Run \`node dist/index.js --sign-in\` in a terminal, or call get_connection_status, then retry.`,
     );
     this.name = 'ResourceInteractionRequiredError';
     this.resource = resource;

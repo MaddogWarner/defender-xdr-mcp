@@ -18,7 +18,7 @@ describe('domain tool authentication gates', () => {
     expect(validateGraphAccess({ id: '1' }, false)).toEqual({
       ok: false,
       reason:
-        'Microsoft Graph requires interactive sign-in. Call get_connection_status to sign in, then retry.',
+        'Microsoft Graph requires interactive sign-in. Run `node dist/index.js --sign-in` in a terminal, or call get_connection_status, then retry.',
     });
   });
 
@@ -26,7 +26,7 @@ describe('domain tool authentication gates', () => {
     expect(validateMdeAccess({ id: 'machine-1' }, false)).toEqual({
       ok: false,
       reason:
-        'Defender for Endpoint requires interactive sign-in. Call get_connection_status to sign in, then retry.',
+        'Defender for Endpoint requires interactive sign-in. Run `node dist/index.js --sign-in` in a terminal, or call get_connection_status, then retry.',
     });
   });
 

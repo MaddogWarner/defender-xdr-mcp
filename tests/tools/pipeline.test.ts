@@ -147,7 +147,7 @@ describe('ToolPipeline', () => {
     ).resolves.toEqual({
       ok: false,
       reason:
-        'Defender for Endpoint requires interactive sign-in. Call get_connection_status to sign in, then retry.',
+        'Defender for Endpoint requires interactive sign-in. Run `node dist/index.js --sign-in` in a terminal, or call get_connection_status, then retry.',
     });
   });
 
