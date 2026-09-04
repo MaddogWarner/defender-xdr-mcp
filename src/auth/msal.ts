@@ -11,25 +11,9 @@ import {
 } from '@azure/msal-node';
 
 import type { AppConfig } from '../config.js';
-import { createEncryptedCachePlugin } from './tokenCache.js';
+import { GRAPH_SCOPES, MDE_TOKEN_SCOPES } from './scopes.js';
 
 export type TokenResource = 'graph' | 'mde';
-
-export const GRAPH_SCOPES = [
-  'https://graph.microsoft.com/ThreatHunting.Read.All',
-  'https://graph.microsoft.com/SecurityIncident.Read.All',
-  'https://graph.microsoft.com/SecurityAlert.Read.All',
-  'https://graph.microsoft.com/User.Read',
-] as const;
-
-export const MDE_TOKEN_SCOPES = ['https://api.securitycenter.microsoft.com/.default'] as const;
-
-export const MDE_DELEGATED_PERMISSIONS = [
-  'Vulnerability.Read',
-  'Machine.Read',
-  'Software.Read',
-  'SecurityRecommendation.Read',
-] as const;
 
 interface TokenApplication {
   getAllAccounts(): Promise<AccountInfo[]>;
@@ -195,6 +179,7 @@ function requiresInteraction(error: unknown): boolean {
 }
 
 export async function createDeviceCodeAuth(config: AppConfig): Promise<DeviceCodeAuth> {
+  const { createEncryptedCachePlugin } = await import('./tokenCache.js');
   const cachePlugin = await createEncryptedCachePlugin(config.clientId);
   const application: IPublicClientApplication = new PublicClientApplication({
     auth: {

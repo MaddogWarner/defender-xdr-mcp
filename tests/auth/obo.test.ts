@@ -2,7 +2,7 @@ import type { AuthenticationResult, OnBehalfOfRequest } from '@azure/msal-node';
 import { describe, expect, it, vi } from 'vitest';
 
 import { OboTokenCache, OnBehalfOfAuth } from '../../src/auth/obo.js';
-import { GRAPH_SCOPES, MDE_TOKEN_SCOPES } from '../../src/auth/msal.js';
+import { GRAPH_SCOPES, MDE_TOKEN_SCOPES } from '../../src/auth/scopes.js';
 
 const NOW_MS = Date.UTC(2026, 7, 30, 0, 0, 0);
 const INBOUND_EXPIRY = NOW_MS / 1000 + 3600;

@@ -9,14 +9,8 @@ import {
 } from '@azure/msal-node';
 
 import type { AppConfig } from '../config.js';
-import {
-  GRAPH_SCOPES,
-  MDE_TOKEN_SCOPES,
-  type AccessTokenContext,
-  type AuthProvider,
-  type ConnectionStatus,
-  type TokenResource,
-} from './msal.js';
+import type { AccessTokenContext, AuthProvider, ConnectionStatus, TokenResource } from './msal.js';
+import { GRAPH_SCOPES, MDE_TOKEN_SCOPES } from './scopes.js';
 
 const EXPIRY_SKEW_MS = 5 * 60 * 1000;
 const DEFAULT_MAXIMUM_CACHE_ENTRIES = 512;

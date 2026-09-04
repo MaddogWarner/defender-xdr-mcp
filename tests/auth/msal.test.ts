@@ -9,12 +9,8 @@ import {
 } from '@azure/msal-node';
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-  DeviceCodeAuth,
-  GRAPH_SCOPES,
-  MDE_TOKEN_SCOPES,
-  ResourceInteractionRequiredError,
-} from '../../src/auth/msal.js';
+import { DeviceCodeAuth, ResourceInteractionRequiredError } from '../../src/auth/msal.js';
+import { GRAPH_SCOPES, MDE_TOKEN_SCOPES } from '../../src/auth/scopes.js';
 
 const account: AccountInfo = {
   homeAccountId: 'home-account',
