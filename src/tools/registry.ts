@@ -14,7 +14,7 @@ import { registerMetaTools } from './meta.js';
 import { ToolPipeline } from './pipeline.js';
 import { registerVulnerabilityTools } from './vulns.js';
 
-export const SERVER_VERSION = '1.0.0';
+export const SERVER_VERSION = '1.1.0';
 
 export interface ServerSharedState {
   rateLimiter: DualWindowRateLimiter;

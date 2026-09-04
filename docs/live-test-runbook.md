@@ -1,6 +1,6 @@
 # Production live-test runbook
 
-Use this runbook for the first production-tenant test of defender-xdr-mcp v1.0.0. Run the gates in order. Record each result in the sheet at the end; do not mark a gate passed unless the expected output was observed.
+Use this runbook for the first production-tenant test of defender-xdr-mcp v1.1.0. Run the gates in order. Record each result in the sheet at the end; do not mark a gate passed unless the expected output was observed.
 
 The stdio and tenant gates are for David's live session in the week commencing 01/09/2026. Gate 6a–6c are CI-verified; Gate 6d requires David's authorised Docker host and remains deferred.
 
@@ -25,7 +25,7 @@ Expected before proceeding:
 - **Authentication → Allow public client flows** is set to **Yes**.
 - **For Gate 5 (HTTP): Manifest → `requestedAccessTokenVersion`** is set to **`2`**. Without it, Entra-only registrations issue v1.0 access tokens and the server returns HTTP 401 `invalid_token`; an `iss` claim beginning with `https://sts.windows.net/` identifies this mismatch. Set the manifest value to `2` and acquire a new token. Do not weaken issuer validation.
 - The test analyst has the intended Defender roles and device-group access.
-- Node.js 20 or later is installed. The repository dependencies and v1.0.0 build complete with:
+- Node.js 20 or later is installed. The repository dependencies and v1.1.0 build complete with:
 
   ```bash
   npx --yes pnpm@11.24.0 install --frozen-lockfile
@@ -53,7 +53,7 @@ node -p "require('./package.json').version"
 Expected version:
 
 ```text
-1.0.0
+1.1.0
 ```
 
 ## Gate 1 — delegated authentication and encrypted cache
@@ -236,14 +236,14 @@ Prepare these test tokens through the organisation's approved development-token 
 Expected before each command:
 
 - The image builds successfully from the repository.
-- The container starts with a read-only root filesystem and its Docker health status becomes `healthy`; `GET /healthz` returns only `{"version":"1.0.0"}`.
+- The container starts with a read-only root filesystem and its Docker health status becomes `healthy`; `GET /healthz` returns only `{"version":"1.1.0"}`.
 - `whoami` inside the container returns `node`.
 - The `node` user can append an audit probe to the mounted `/audit` volume.
 
 On the authorised Docker host:
 
 ```bash
-docker build --tag defender-xdr-mcp:1.0.0 .
+docker build --tag defender-xdr-mcp:1.1.0 .
 docker volume create defender-xdr-mcp-live-audit
 docker run --detach \
   --name defender-xdr-mcp-live \
@@ -257,7 +257,7 @@ docker run --detach \
   --env DXM_HTTP_HOST=0.0.0.0 \
   --env DXM_AUDIT_LOG_PATH=/audit/audit.jsonl \
   --mount source=defender-xdr-mcp-live-audit,target=/audit \
-  defender-xdr-mcp:1.0.0
+  defender-xdr-mcp:1.1.0
 ```
 
 After the health start period:
@@ -274,7 +274,7 @@ Expected outputs, in order:
 
 ```text
 healthy
-{"version":"1.0.0"}
+{"version":"1.1.0"}
 node
 -rw------- node:node /audit/audit.jsonl
 ```
