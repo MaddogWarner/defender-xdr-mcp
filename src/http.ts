@@ -26,11 +26,7 @@ const HEALTH_PATH = '/healthz';
 const REQUIRED_SCOPE = 'access_as_user';
 
 interface OboFactory {
-  create(
-    assertion: string,
-    upn: string,
-    inboundExpiresAt: number,
-  ): AuthProvider & { prime(): Promise<void> };
+  create(assertion: string, upn: string, inboundExpiresAt: number): AuthProvider;
 }
 
 interface FetchHandler {
@@ -44,12 +40,11 @@ export function createHttpFetchHandler(
   sharedState: ServerSharedState = createServerSharedState(config),
 ): FetchHandler {
   const publicOrigin = configuredPublicOrigin(config);
-  const mcp = createMcpHandler(async ({ authInfo }) => {
+  const mcp = createMcpHandler(({ authInfo }) => {
     if (authInfo?.expiresAt === undefined) {
       throw new Error('Validated HTTP authentication context is missing');
     }
     const auth = oboFactory.create(authInfo.token, authInfoUpn(authInfo), authInfo.expiresAt);
-    await auth.prime();
     return createDefenderServer(config, auth, sharedState);
   });
 

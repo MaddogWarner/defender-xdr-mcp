@@ -1,4 +1,5 @@
 import { ResourceInteractionRequiredError } from '../auth/msal.js';
+import { OnBehalfOfExchangeError } from '../auth/obo.js';
 import type { AuditEntry } from '../audit/log.js';
 import { ContinuationTokenError } from '../clients/continuationTokens.js';
 import { MicrosoftApiError } from '../clients/http.js';
@@ -126,6 +127,7 @@ function correctableReason(error: unknown): string | undefined {
   if (
     error instanceof ContinuationTokenError ||
     error instanceof ResourceInteractionRequiredError ||
+    error instanceof OnBehalfOfExchangeError ||
     error instanceof LocalRateLimitError
   ) {
     return error.message;

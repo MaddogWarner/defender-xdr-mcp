@@ -2,7 +2,7 @@
 
 Use this runbook for the first production-tenant test of defender-xdr-mcp v1.0.0. Run the gates in order. Record each result in the sheet at the end; do not mark a gate passed unless the expected output was observed.
 
-The stdio and tenant gates are for David's live session in the week commencing 01/09/2026. Gate 6 requires a Docker-capable host or CI and remains deferred until one is authorised and available.
+The stdio and tenant gates are for David's live session in the week commencing 01/09/2026. Gate 6a–6c are CI-verified; Gate 6d requires David's authorised Docker host and remains deferred.
 
 ## Pre-flight
 
@@ -23,6 +23,7 @@ Expected before proceeding:
 
 - No Application permissions or `.ReadWrite` permissions are present.
 - **Authentication → Allow public client flows** is set to **Yes**.
+- **For Gate 5 (HTTP): Manifest → `requestedAccessTokenVersion`** is set to **`2`**. Without it, Entra-only registrations issue v1.0 access tokens and the server returns HTTP 401 `invalid_token`; an `iss` claim beginning with `https://sts.windows.net/` identifies this mismatch. Set the manifest value to `2` and acquire a new token. Do not weaken issuer validation.
 - The test analyst has the intended Defender roles and device-group access.
 - Node.js 20 or later is installed. The repository dependencies and v1.0.0 build complete with:
 
@@ -61,23 +62,22 @@ Expected on the first run:
 
 - One or two Microsoft device-code prompts appear, depending on cached consent.
 - Both resource-specific success lines appear exactly as below, with `<UPN>` replaced by the analyst's UPN.
-- The stdio listener line appears.
+- The command exits with code 0 without printing a listener line.
 
 ```text
 Authenticated to Microsoft Graph as <UPN>
 Authenticated to Defender for Endpoint as <UPN>
-defender-xdr-mcp is listening on stdio
 ```
 
-Run the explicit authentication smoke path:
+Run the sign-in command against the built artefact:
 
 ```bash
-npx --yes pnpm@11.24.0 dev
+node dist/index.js --sign-in
 ```
 
-Complete the device-code prompt with the intended analyst identity, including MFA and Conditional Access. Stop the process with `Ctrl-C`, then run the same command again.
+Complete the device-code prompt with the intended analyst identity, including MFA and Conditional Access. Confirm the command exits with code 0, then run it again.
 
-Expected after restart: the three lines above appear again, with **no new device-code prompt**. This proves silent acquisition from the encrypted MSAL cache for both Graph and MDE. If either resource prompts again, record Gate 1 as failed and capture stderr without the device code itself.
+Expected on the second run: the two lines above appear again, the command exits with code 0, and there is **no new device-code prompt** or listener line. This proves silent acquisition from the encrypted MSAL cache for both Graph and MDE. If either resource prompts again, record Gate 1 as failed and capture stderr without the device code itself.
 
 ## Gate 2 — stdio MCP and advanced hunting
 
@@ -116,11 +116,17 @@ Expected before testing:
 In the same Inspector session, call:
 
 1. `list_incidents` with `{"top":5}`.
-2. `list_alerts` with `{"top":5}`.
-3. `list_vulnerabilities` with `{"top":5}`.
-4. `list_devices` with `{"top":5}`.
+2. `get_incident` with `{"id":"<id-from-list_incidents>"}`.
+3. `list_alerts` with `{"top":5}`.
+4. `list_vulnerabilities` with `{"top":5}`.
+5. `list_devices` with `{"top":5}`.
+6. `get_device` with `{"id":"<id-from-list_devices>"}`.
+7. `list_software` with `{"top":5}`.
+8. `list_security_recommendations` with `{"top":5}`.
 
 The first MDE calls exercise the separate Defender token audience. A typical mismatch presents as HTTP 403 with an authorisation-related Microsoft error. Confirm the app has the four WindowsDefenderATP delegated permissions with admin consent, then confirm the implementation is acquiring the MDE resource scope `https://api.securitycenter.microsoft.com/.default`. Do not add Application or write permissions as a workaround.
+
+Microsoft does not document OData `$top` or `$filter` support for software, security recommendations or machine references. The expected result is a shaped response. An HTTP 400 that mentions a query option fails the relevant subtest; capture the compact Microsoft error so the unsupported option can be diagnosed.
 
 ## Gate 4 — guardrails observed against the tenant
 
@@ -225,7 +231,7 @@ Prepare these test tokens through the organisation's approved development-token 
 
 ## Gate 6 — container runtime
 
-**Status before testing: DEFERRED — Docker is not installed on David's Mac. Run this gate only on an authorised Docker-capable host or in CI. Do not copy the private working tree to an unauthorised host.**
+**Status before testing: Gate 6a–6c passed in GitHub Actions on 04/09/2026 at 11:46 AEST ([CI evidence](https://github.com/MaddogWarner/defender-xdr-mcp/actions/runs/33826849251)). Gate 6d remains DEFERRED because Docker is not installed on David's Mac. Run 6d only on an authorised Docker-capable host; do not copy the private working tree to an unauthorised host.**
 
 Expected before each command:
 
@@ -279,21 +285,21 @@ Retain the build log and command outputs as evidence. After evidence capture, re
 
 Use `Pass`, `Fail` or `Blocked`; never use `Pass` for a partially executed gate.
 
-| Gate                          | Result | Date/time (AEST) | Evidence reference | Tester/notes |
-| ----------------------------- | ------ | ---------------- | ------------------ | ------------ |
-| Pre-flight                    |        |                  |                    |              |
-| 1 — auth and restart          |        |                  |                    |              |
-| 2 — stdio and hunting         |        |                  |                    |              |
-| 3 — Graph and MDE families    |        |                  |                    |              |
-| 4 — guardrails and audit      |        |                  |                    |              |
-| 5 — HTTP valid token          |        |                  |                    |              |
-| 5a — wrong audience 401       |        |                  |                    |              |
-| 5b — wrong issuer 401         |        |                  |                    |              |
-| 5c — expired token 401        |        |                  |                    |              |
-| 6a — Docker build             |        |                  |                    |              |
-| 6b — Docker run and health    |        |                  |                    |              |
-| 6c — container user is `node` |        |                  |                    |              |
-| 6d — mounted audit write      |        |                  |                    |              |
+| Gate                          | Result  | Date/time (AEST)      | Evidence reference | Tester/notes                                                    |
+| ----------------------------- | ------- | --------------------- | ------------------ | --------------------------------------------------------------- |
+| Pre-flight                    |         |                       |                    |                                                                 |
+| 1 — auth and restart          |         |                       |                    |                                                                 |
+| 2 — stdio and hunting         |         |                       |                    |                                                                 |
+| 3 — Graph and MDE families    |         |                       |                    |                                                                 |
+| 4 — guardrails and audit      |         |                       |                    |                                                                 |
+| 5 — HTTP valid token          |         |                       |                    |                                                                 |
+| 5a — wrong audience 401       |         |                       |                    |                                                                 |
+| 5b — wrong issuer 401         |         |                       |                    |                                                                 |
+| 5c — expired token 401        |         |                       |                    |                                                                 |
+| 6a — Docker build             | Pass    | 04/09/2026 11:46 AEST | CI run 33826849251 | GitHub Actions                                                  |
+| 6b — Docker run and health    | Pass    | 04/09/2026 11:46 AEST | CI run 33826849251 | GitHub Actions                                                  |
+| 6c — container user is `node` | Pass    | 04/09/2026 11:46 AEST | CI run 33826849251 | GitHub Actions                                                  |
+| 6d — mounted audit write      | Blocked |                       |                    | Docker unavailable locally; deferred to David's authorised host |
 
 For every failure, capture only:
 

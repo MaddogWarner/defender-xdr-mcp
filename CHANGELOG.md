@@ -4,6 +4,19 @@ All notable changes to this project are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Isolated the stdio-only encrypted token-cache dependency from HTTP startup, included pnpm's approved-build policy in the container build context, and added CI checks for image build, read-only startup, exact health response and non-root execution.
+- Deferred Graph and Defender on-behalf-of exchanges until a tool needs the relevant resource, with safe model-readable guidance for MSAL failures and retryable failed exchanges.
+- Added `node dist/index.js --sign-in` so stdio users can complete Graph and Defender device-code authentication before connecting an MCP client.
+- Inserted the server KQL row cap before a trailing `render` operator so generated queries remain valid.
+
+### Changed
+
+- Corrected deployment, client, runbook and assessment guidance for Entra v2 access tokens, tenant-wide hunting quotas, Graph page-size limits, reverse-proxy request-body limits, expanded live tool coverage, and CI-verified container controls.
+
 ## [1.0.0] - 30/08/2026
 
 ### Added

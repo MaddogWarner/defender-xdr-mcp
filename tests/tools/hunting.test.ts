@@ -39,7 +39,7 @@ describe('validateHuntingRequest guardrail integration', () => {
     ).toEqual({
       ok: false,
       reason:
-        'Not signed in to Microsoft Graph. Call get_connection_status to sign in, then retry.',
+        'Not signed in to Microsoft Graph. Run `node dist/index.js --sign-in` in a terminal, or call get_connection_status, then retry.',
     });
   });
 });

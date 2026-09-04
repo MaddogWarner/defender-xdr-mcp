@@ -1,8 +1,8 @@
 import type { AuthenticationResult, OnBehalfOfRequest } from '@azure/msal-node';
 import { describe, expect, it, vi } from 'vitest';
 
-import { OboTokenCache, OnBehalfOfAuth } from '../../src/auth/obo.js';
-import { GRAPH_SCOPES, MDE_TOKEN_SCOPES } from '../../src/auth/msal.js';
+import { OboTokenCache, OnBehalfOfAuth, OnBehalfOfExchangeError } from '../../src/auth/obo.js';
+import { GRAPH_SCOPES, MDE_TOKEN_SCOPES } from '../../src/auth/scopes.js';
 
 const NOW_MS = Date.UTC(2026, 7, 30, 0, 0, 0);
 const INBOUND_EXPIRY = NOW_MS / 1000 + 3600;
@@ -51,7 +51,8 @@ describe('OnBehalfOfAuth', () => {
       () => NOW_MS,
     );
 
-    await auth.prime();
+    await auth.getToken('graph');
+    await auth.getToken('mde');
 
     expect(acquireTokenOnBehalfOf).toHaveBeenCalledTimes(2);
     expect(acquireTokenOnBehalfOf.mock.calls.map(([request]) => request.scopes)).toEqual(
@@ -136,9 +137,50 @@ describe('OnBehalfOfAuth', () => {
     expect(acquireTokenOnBehalfOf).toHaveBeenCalledTimes(2);
   });
 
-  it('fails when MSAL returns no OBO result', async () => {
+  it.each([
+    [
+      'invalid_grant',
+      "Ask an administrator to confirm the app registration's delegated WindowsDefenderATP permissions have admin consent",
+    ],
+    [
+      'interaction_required',
+      "Ask an administrator to grant consent for the app registration's delegated WindowsDefenderATP permissions",
+    ],
+    [
+      'consent_required',
+      "Ask an administrator to grant consent for the app registration's delegated WindowsDefenderATP permissions",
+    ],
+    [
+      'unauthorized_client',
+      'Ask an administrator to confirm the app registration is authorised for delegated WindowsDefenderATP on-behalf-of access',
+    ],
+    ['temporarily_unavailable', 'Ask an administrator to review the app registration'],
+  ])('maps the %s MSAL failure to safe guidance', async (errorCode, guidance) => {
+    const upstream = Object.assign(new Error('raw claims challenge must not escape'), {
+      errorCode,
+    });
     const auth = new OnBehalfOfAuth(
-      { acquireTokenOnBehalfOf: vi.fn().mockResolvedValue(null) },
+      { acquireTokenOnBehalfOf: vi.fn().mockRejectedValue(upstream) },
+      'sensitive-inbound-token',
+      'analyst@example.com',
+      INBOUND_EXPIRY,
+      new OboTokenCache(),
+      () => NOW_MS,
+    );
+
+    const failure = await auth.getToken('mde').catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(OnBehalfOfExchangeError);
+    expect(failure).toMatchObject({ resource: 'mde', errorCode });
+    expect((failure as Error).message).toContain(guidance);
+    expect((failure as Error).message).not.toContain('raw claims challenge');
+    expect((failure as Error).message).not.toContain('sensitive-inbound-token');
+  });
+
+  it('maps a missing OBO result without caching it', async () => {
+    const acquireTokenOnBehalfOf = vi.fn().mockResolvedValue(null);
+    const auth = new OnBehalfOfAuth(
+      { acquireTokenOnBehalfOf },
       'inbound-token',
       'analyst@example.com',
       INBOUND_EXPIRY,
@@ -146,8 +188,35 @@ describe('OnBehalfOfAuth', () => {
       () => NOW_MS,
     );
 
-    await expect(auth.getToken('graph')).rejects.toThrow(
-      'Microsoft OBO exchange did not return a token for graph',
+    await expect(auth.getToken('graph')).rejects.toMatchObject({
+      name: 'OnBehalfOfExchangeError',
+      resource: 'graph',
+      errorCode: 'no_token_result',
+    });
+    await expect(auth.getToken('graph')).rejects.toBeInstanceOf(OnBehalfOfExchangeError);
+    expect(acquireTokenOnBehalfOf).toHaveBeenCalledTimes(2);
+  });
+
+  it('clears a rejected pending exchange so the next call retries', async () => {
+    const acquireTokenOnBehalfOf = vi
+      .fn<(request: OnBehalfOfRequest) => Promise<AuthenticationResult | null>>()
+      .mockRejectedValueOnce(
+        Object.assign(new Error('first failure'), { errorCode: 'invalid_grant' }),
+      )
+      .mockResolvedValueOnce(result(GRAPH_SCOPES));
+    const auth = new OnBehalfOfAuth(
+      { acquireTokenOnBehalfOf },
+      'inbound-token',
+      'analyst@example.com',
+      INBOUND_EXPIRY,
+      new OboTokenCache(),
+      () => NOW_MS,
     );
+
+    await expect(auth.getToken('graph')).rejects.toBeInstanceOf(OnBehalfOfExchangeError);
+    await expect(auth.getToken('graph')).resolves.toMatchObject({
+      accessToken: 'downstream-token',
+    });
+    expect(acquireTokenOnBehalfOf).toHaveBeenCalledTimes(2);
   });
 });

@@ -8,6 +8,17 @@ export interface RuntimeHandle {
   close(): Promise<void>;
 }
 
+export async function authenticateStdio(auth: DeviceCodeAuth): Promise<void> {
+  const graphToken = await auth.getToken('graph');
+  console.error(
+    `Authenticated to Microsoft Graph as ${graphToken.account?.username ?? 'unknown user'}`,
+  );
+  const mdeToken = await auth.getToken('mde');
+  console.error(
+    `Authenticated to Defender for Endpoint as ${mdeToken.account?.username ?? 'unknown user'}`,
+  );
+}
+
 export async function startStdio(
   config: AppConfig,
   auth: DeviceCodeAuth,
@@ -15,14 +26,7 @@ export async function startStdio(
   serve: typeof serveStdio = serveStdio,
 ): Promise<RuntimeHandle> {
   if (devAuthSmoke) {
-    const graphToken = await auth.getToken('graph');
-    console.error(
-      `Authenticated to Microsoft Graph as ${graphToken.account?.username ?? 'unknown user'}`,
-    );
-    const mdeToken = await auth.getToken('mde');
-    console.error(
-      `Authenticated to Defender for Endpoint as ${mdeToken.account?.username ?? 'unknown user'}`,
-    );
+    await authenticateStdio(auth);
   }
 
   const sharedState = createServerSharedState(config);
