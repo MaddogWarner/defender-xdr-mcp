@@ -1,7 +1,7 @@
 # Multi-stage build — final image carries dist + prod deps only, runs as non-root.
 FROM node:24-alpine AS build
 WORKDIR /app
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN npx --yes pnpm@11.24.0 install --frozen-lockfile
 COPY . .
 RUN npx --yes pnpm@11.24.0 build && npx --yes pnpm@11.24.0 prune --prod
