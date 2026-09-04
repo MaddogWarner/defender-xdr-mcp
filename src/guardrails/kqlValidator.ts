@@ -65,12 +65,44 @@ export function validateKql(
     ...outerResultStatement(visibleQuery).matchAll(/(?:^|\|)\s*(?:take|limit|top)\s+(\d+)\b/gi),
   ];
   const alreadyBounded = rowOperators.some((match) => Number(match[1]) <= config.maxRows);
-  const guardedQuery = alreadyBounded ? query : `${query.trimEnd()}\n| take ${config.maxRows}`;
+  const renderPipeIndex = trailingOuterRenderPipeIndex(visibleQuery);
+  const guardedQuery = alreadyBounded
+    ? query
+    : renderPipeIndex === undefined
+      ? `${query.trimEnd()}\n| take ${config.maxRows}`
+      : `${query.slice(0, renderPipeIndex).trimEnd()}\n| take ${config.maxRows} ${query.slice(renderPipeIndex)}`;
   if (!alreadyBounded) {
     notices.push(`The query was capped at ${config.maxRows} rows.`);
   }
 
   return { ok: true, query: guardedQuery, timespan: effectiveTimespan, notices };
+}
+
+function trailingOuterRenderPipeIndex(query: string): number | undefined {
+  let depth = 0;
+  let pipeIndex: number | undefined;
+
+  for (let index = 0; index < query.length; index += 1) {
+    const character = query[index];
+    if (character === '(' || character === '[' || character === '{') {
+      depth += 1;
+      continue;
+    }
+    if (character === ')' || character === ']' || character === '}') {
+      depth = Math.max(0, depth - 1);
+      continue;
+    }
+    if (character === ';' && depth === 0) {
+      pipeIndex = undefined;
+      continue;
+    }
+    if (character === '|' && depth === 0) {
+      pipeIndex = index;
+    }
+  }
+
+  if (pipeIndex === undefined) return undefined;
+  return /^\s*render\b/i.test(query.slice(pipeIndex + 1)) ? pipeIndex : undefined;
 }
 
 function outerResultStatement(query: string): string {

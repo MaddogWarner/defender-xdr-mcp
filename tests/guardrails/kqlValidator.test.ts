@@ -114,6 +114,29 @@ adx('cluster/database').Table`,
     });
   });
 
+  it('inserts the configured cap before a trailing render operator', () => {
+    expect(validateKql('T | render timechart', undefined, config)).toMatchObject({
+      ok: true,
+      query: 'T\n| take 1000 | render timechart',
+    });
+  });
+
+  it('does not add a second cap before render when the outer result is already bounded', () => {
+    const query = 'T | take 10 | render barchart';
+    expect(validateKql(query, undefined, config)).toMatchObject({ ok: true, query });
+  });
+
+  it.each([
+    'T | extend message="| render timechart"',
+    'T // | render timechart',
+    'T | where Key in (U | render table)',
+  ])('ignores render outside the final outer pipe stage: %s', (query) => {
+    expect(validateKql(query, undefined, config)).toMatchObject({
+      ok: true,
+      query: `${query}\n| take 1000`,
+    });
+  });
+
   it.each([
     'let sample = DeviceInfo | take 5;\nsample',
     'DeviceInfo | where DeviceId in (DeviceInfo | take 5 | project DeviceId)',

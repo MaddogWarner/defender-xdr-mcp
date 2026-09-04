@@ -264,6 +264,7 @@ Carried forward honestly rather than closed off:
 - No independent security review (R5).
 - Audit file permissions are repaired to `0600` on every write, which will conflict with a deployment deliberately using group-readable log files for a shipping agent.
 - The `/healthz` endpoint is unauthenticated and reachable regardless of `Host` header. It returns only a version string.
+- An outer `take` followed by `mv-expand` or a join can multiply rows after the validator's bound. The validator does not reject these valid query shapes; the output shaper still enforces the configured row and byte caps before results reach the model.
 - No software composition analysis beyond Dependabot.
 - Rate limiter tuning is based on Microsoft's published quotas as verified on 29/08/2026 (`api-verification.md`); those quotas can change without notice.
 
