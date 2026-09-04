@@ -239,6 +239,98 @@ Consequence: the `node:24-alpine` image has no libsecret and the Dockerfile bake
 
 Gate: standard gate plus `pnpm test:coverage`. The Docker build/run gate remains **DEFERRED** and this defect is a strong reason to run it before any trial.
 
+## Step 10 — Post-v1.0.0 review remediation (Claude, 03/09/2026)
+
+Source: Claude's full-project review of 03/09/2026 (automated gate re-run locally: lint, typecheck, 147 tests, build all green; MCP SDK v2 source and Microsoft Learn checked the same day). Work the sub-steps **in order**; 10.1 is Step 9 and must land first because nothing on the HTTP path can be verified until it does. Every sub-step ends with the standard gate plus `pnpm test:coverage`. Live gates stay **DEFERRED** to David; record them as such.
+
+Do **not** bump `SERVER_VERSION` or `package.json` `version`. Record all changes under a new `## [Unreleased]` heading in `CHANGELOG.md`; the version bump and tag are Phase 6, David-gated.
+
+### 10.1 — Land Step 9 (blocking; HTTP mode cannot start on Linux)
+
+**Status (Codex, 04/09/2026): implementation and automated gates complete on draft PR #6.** The pre-fix container failed with the expected missing `libsecret-1.so.0` import in [CI run 33826321921](https://github.com/MaddogWarner/defender-xdr-mcp/actions/runs/33826321921); the fixed image passed build, read-only startup, exact health response and non-root-user checks in [CI run 33826849251](https://github.com/MaddogWarner/defender-xdr-mcp/actions/runs/33826849251). Standard gate and coverage passed (150 tests; guardrails 99.15 % lines). Gate 6d remains **DEFERRED**. Merge and the required green `main` run remain David-gated.
+
+Implement Step 9 exactly as written above. Confirmed still open on 03/09/2026: `src/auth/msal.ts:14` statically imports `tokenCache.js`, `src/auth/scopes.ts` does not exist, and both `KeychainPersistence.mjs` and `LibSecretPersistence.mjs` in the installed `@azure/msal-node-extensions@5.4.0` import `keytar` at module top level.
+
+**Additional gate for 10.1 — convert the deferred Docker gate into CI.** `ubuntu-latest` has Docker. Add a second job `container` to `.github/workflows/ci.yml` (same `permissions: contents: read`) that:
+
+1. `docker build --tag defender-xdr-mcp:ci .`
+2. Runs it detached with the stub environment from runbook Gate 6 (`DXM_HTTP_HOST=0.0.0.0`, loopback `DXM_PUBLIC_URL`, placeholder GUIDs and secret), `--read-only --tmpfs /tmp`, publishing `127.0.0.1:3020:3020`.
+3. Polls `http://127.0.0.1:3020/healthz` for up to 30 s and asserts the body is exactly `{"version":"1.0.0"}` (read the expected version from `package.json` rather than hard-coding it).
+4. Asserts `docker exec <name> whoami` prints `node`.
+5. Always prints `docker logs` on failure so the crash is diagnosable.
+
+This job must **fail on `main` before the Step 9 fix and pass after** — run it against the pre-fix commit once to prove it detects the defect, note the run URL in the sub-step status, then land the fix. Runbook Gate 6 items 6a–6c are then covered by CI; 6d (mounted named-volume audit write) stays DEFERRED for David's Docker host.
+
+### 10.2 — HTTP mode: stop priming OBO in the request factory (blocking for shared mode)
+
+**Status (Codex, 04/09/2026): implementation and automated gates complete on draft PR #6.** Standard gate and coverage passed (159 tests; guardrails 99.15 % lines). Live Gate 5 remains **DEFERRED**.
+
+**Problem.** `src/http.ts:52` calls `auth.prime()` inside the `createMcpHandler` factory, which awaits Graph **and** MDE on-behalf-of exchanges before the `McpServer` exists. SDK v2's modern path invokes that factory on **every request** (verified in `@modelcontextprotocol/server@2.0.0`, `createMcpHandler` → `serveModern`; the factory call sits outside the `try`, and `handle()` converts the throw into a bare `500 Internal server error`). Consequences: a missing WindowsDefenderATP consent, or any MDE OBO failure, breaks `initialize` and `tools/list` for that user with no model-readable reason; and a user who only wants incidents still pays for an MDE exchange. stdio mode already does this correctly — domain tools fail fast per resource via `hasUsableToken`.
+
+**Required change.**
+
+- Remove `prime()` from `OnBehalfOfAuth` and from the `OboFactory` interface in `http.ts`. The factory must do no network I/O; it builds the server and returns.
+- Add `OnBehalfOfExchangeError` in `src/auth/obo.ts`: thrown when `acquireTokenOnBehalfOf` rejects or returns `null`. Carries `resource` and the MSAL `errorCode` (never the assertion, never token material, never the raw MSAL message which can echo claims). Message is model-readable in the existing house style, e.g. `Defender for Endpoint could not be accessed on your behalf (invalid_grant). Ask an administrator to confirm the app registration's delegated WindowsDefenderATP permissions have admin consent, then retry.` Map at least `invalid_grant`, `interaction_required`/`consent_required` and `unauthorized_client` to specific guidance; everything else gets the generic form with the code.
+- `OnBehalfOfAuth.hasUsableToken` keeps calling `getToken` and lets `OnBehalfOfExchangeError` propagate; do not swallow it into `false`, because the stdio-style "call get_connection_status to sign in" message is wrong for HTTP (there is no interactive flow to invoke).
+- Add `OnBehalfOfExchangeError` to `correctableReason` in `src/tools/pipeline.ts` so it is audited (`validation_error` on the validate leg, the error name on the execute leg) and returned as a tool error rather than rethrown.
+- Failed exchanges must **not** be cached, and a pending-promise rejection must clear the pending slot (already the case via `finally`; add a test that proves a second call retries).
+
+**Tests.**
+
+- `tests/auth/bearer.test.ts`: a valid inbound token whose MDE OBO exchange rejects must still get a successful `initialize` and `tools/list`; `list_incidents` succeeds; `list_devices` returns `isError: true` with the model-readable reason; the audit entry carries the error code and no token material.
+- `tests/auth/obo.test.ts`: error mapping for the listed MSAL codes; rejected exchange not cached; retry after rejection.
+- Delete or rewrite the existing "passes validated identity into OBO and serves an MCP initialise request" case so it no longer asserts priming.
+
+### 10.3 — stdio: dedicated sign-in command (device-code UX)
+
+**Status (Codex, 04/09/2026): implementation and automated gates complete on draft PR #6.** Standard gate and coverage passed (161 tests; guardrails 99.15 % lines). Live Gate 1 remains **DEFERRED**.
+
+**Problem.** The README tells analysts to connect their client and then call `get_connection_status`. That launches the device-code flow inside a tool call: the prompt goes to stderr (a log file under Claude Desktop), the call blocks until the user completes sign-in, and client tool timeouts can abort it while MSAL keeps polling. The runbook sidesteps this with `pnpm dev`, but analysts follow the README, not the runbook, and `pnpm dev` needs the source tree and `tsx`.
+
+**Required change.**
+
+- Add a `--sign-in` argument to `src/index.ts` for stdio mode: load config, create the device-code auth, acquire Graph then MDE (printing the two existing `Authenticated to …` lines to stderr), then **exit 0 without starting the transport**. Non-zero exit with the existing error message on failure. Keep `--dev-auth-smoke` unchanged.
+- Refactor the two token-acquisition lines out of `startStdio` into a shared helper so the smoke path and the sign-in path cannot drift.
+- Do not add an interactive prompt of any kind to normal stdio startup; tool calls keep failing fast with the existing pointer, but reword that pointer to name the command: `… Run \`node dist/index.js --sign-in\` in a terminal, or call get_connection_status, then retry.` Update the three sign-in-required constants (`hunting.ts`, `incidents.ts`, `vulns.ts`) and `ResourceInteractionRequiredError`.
+
+**Tests.** `tests/runtime.test.ts` (or a new `tests/index.test.ts` with the entry refactored to be importable): `--sign-in` acquires both resources in order, never calls `serve`, and resolves; a Graph failure stops before MDE.
+
+### 10.4 — KQL validator: row cap must not be appended after `render`
+
+**Status (Codex, 04/09/2026): implementation and automated gates complete on draft PR #6.** Standard gate and coverage passed (166 tests; guardrails 99.2 % lines). The `mv-expand`/join limitation remains documented and is not newly rejected.
+
+`| take N` appended after a trailing `render` operator produces a query Kusto rejects, and the agent cannot remove the server-appended clause to recover. In `validateKql`, when the outer result statement's final pipe stage is `render`, insert `| take N` **before** that stage instead of at the end. Work on `visibleQuery` for detection and splice into the original `query` text; keep the existing `alreadyBounded` logic untouched.
+
+Tests: `T | render timechart` → `T\n| take N | render timechart`; `T | take 10 | render barchart` unchanged; `render` inside a string literal or comment ignored; `render` in a nested subquery ignored. Coverage must not regress below the current 97.70 % lines on guardrails.
+
+Record the remaining known limitation — an outer `take` followed by `mv-expand` or a join can multiply rows, and the output shaper is the control that still caps them — in `docs/security-assessment.md` §12. Do not add a new rejection; the amendment rule in Step 8 stands.
+
+### 10.5 — Documentation and runbook corrections
+
+**Status (Codex, 04/09/2026): implementation and automated gates complete on draft PR #6.** The documentation, runbook, assessment and changelog sweep is complete. Final standard gate and coverage passed (22 test files, 166 tests; 98.96 % combined lines; guardrails 99.2 %). Live Gates 1–5 and 6d remain **DEFERRED**. Merge and the required green `main` container job remain David-gated.
+
+All of these are required for shared mode to work as documented or for the live session to be diagnosable. Doc-only; no code.
+
+1. **Entra access-token version (blocking for Gate 5).** `src/auth/bearer.ts` pins the v2.0 issuer, which is correct. Microsoft Learn (checked 03/09/2026, "Access tokens in the Microsoft identity platform"): Entra-only registrations default to **v1.0** access tokens (issuer `https://sts.windows.net/{tid}/`); only `requestedAccessTokenVersion: 2` in the app manifest yields v2.0. Add to `docs/http-deployment.md` step 1 ("Expose an API"): set **Manifest → `requestedAccessTokenVersion` = `2`** and explain that without it every token is rejected with 401 `invalid_token`. Add the same check to the runbook Gate 5 pre-flight, with the symptom (401 on a valid token, `iss` claim starting `https://sts.windows.net/`) and remedy. Do not widen the verifier to accept v1.0 issuers.
+2. **README §2 and `docs/clients.md`:** replace "after connecting the client, call `get_connection_status`" with: run `node dist/index.js --sign-in` once in a terminal (from 10.3), then connect the client. Keep `get_connection_status` as the in-session status/re-activation tool. Update the runbook Gate 1 to use the built artefact and the new flag; expected output becomes the two `Authenticated to …` lines followed by exit code 0, no listener line.
+3. **Tenant-wide quota vs per-process limiter.** README configuration table and Troubleshooting: the hunting limit is enforced per server process, but Microsoft's ≈45/min is per tenant. State the rule of thumb (per-analyst `DXM_HUNTING_RPM` ≈ 45 ÷ number of concurrent stdio analysts, leaving headroom for the portal) and that HTTP mode enforces one shared budget. Also state that incidents/alerts calls share the `DXM_HUNTING_*` values (`src/tools/registry.ts:35`) and that Graph list endpoints enforce their own page-size maximums, so `DXM_MAX_ROWS` values above those return HTTP 400 from Microsoft.
+4. **Runbook Gate 3:** add `get_incident` (an ID from the `list_incidents` result), `get_device` (an ID from `list_devices`), `list_software` `{"top":5}` and `list_security_recommendations` `{"top":5}`. Microsoft does not document OData `$top`/`$filter` for software, recommendations or machine references; the expected outcome is a shaped result, and an HTTP 400 mentioning the query option is the failure signature to capture.
+5. **`docs/http-deployment.md`:** the server and SDK impose no request-body size limit; add `request_body { max_size 1MB }` to the Caddy example and `client_max_body_size 1m;` to the nginx example, with one sentence saying why.
+6. **`docs/security-assessment.md` §7 and §12:** after 10.1 lands, update the verification status (container build/run/non-root now CI-verified; 6d still deferred) and remove the open-defect paragraph; add the token-version item and the KQL limitation from 10.4.
+7. **`CHANGELOG.md`:** `## [Unreleased]` with `### Fixed` entries for 10.1–10.4 and `### Changed` for the documentation items.
+
+### Open decisions for David (not Codex work)
+
+- `AGENTS.md` and `CLAUDE.md` are excluded by the global gitignore, but the tracked `codex-plan.md` and `docs/handoff-steps-4-8.md` tell readers to load them. Options: force-add them, or reword the tracked references. Claude recommends rewording once David confirms they are meant to stay private.
+- Whether `codex-plan.md`, `project-plan.md` and `docs/handoff-steps-4-8.md` should ship in the public repo at all, or move under a git-ignored `planning/` directory before the next release.
+
+### Definition of done for Step 10
+
+- Sub-steps 10.1–10.5 complete, each with an honest status line in this file; CI `container` job green on `main`.
+- Standard gate and `pnpm test:coverage` green; guardrail coverage ≥ 97.70 % lines.
+- Nothing pushed, tagged or released beyond the working branch/PR David authorises; version unchanged.
+- Hand to Claude for review before David runs runbook Gates 5 and 6d.
+
 ## Out of scope (do not build)
 
 Secure Score tools; any write/response action; app-only auth; multi-tenant support; a web UI; metrics/telemetry emission from the server itself; npm publishing (decided at Phase 6).

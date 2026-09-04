@@ -4,7 +4,7 @@ Run one instance for the team. Every request is still authenticated as an indivi
 
 ## Additional Entra configuration (on the same app registration)
 
-1. **Expose an API:** set the Application ID URI (`api://<client-id>`) and add the scope `access_as_user` (admin-and-users consent).
+1. **Expose an API:** set the Application ID URI (`api://<client-id>`) and add the scope `access_as_user` (admin-and-users consent). Then open **Manifest** and set `requestedAccessTokenVersion` to `2`. Entra-only registrations otherwise default to v1.0 access tokens; this server deliberately pins the v2.0 issuer, so every v1.0 token is rejected with HTTP 401 `invalid_token`.
 2. **Client credential for OBO:** upload a certificate (preferred; PEM with cert + private key, referenced by `DXM_CLIENT_CERT_PATH`) or create a client secret. This credential only enables the on-behalf-of exchange — the app still holds zero application permissions.
 3. **Client provisioning — no dynamic registration.** Entra doesn't support the OAuth dynamic client registration some MCP clients attempt, so each remote client is configured with the org's pre-registered client ID and uses authorisation-code + PKCE. Add each client's redirect URI to the app registration as you onboard it.
 
@@ -47,6 +47,9 @@ Terminate TLS in front and forward to loopback. Caddy example:
 
 ```
 defender-mcp.example.internal {
+    request_body {
+        max_size 1MB
+    }
     reverse_proxy 127.0.0.1:3020
 }
 ```
@@ -62,6 +65,7 @@ server {
 
     ssl_certificate /etc/nginx/tls/fullchain.pem;
     ssl_certificate_key /etc/nginx/tls/private-key.pem;
+    client_max_body_size 1m;
 
     location / {
         proxy_pass http://127.0.0.1:3020;
@@ -71,12 +75,15 @@ server {
 }
 ```
 
+The server and MCP SDK do not impose a request-body size limit. Enforce the 1 MB limit at the reverse proxy to bound memory use from oversized requests before they reach Node.js.
+
 The Node.js service deliberately serves plain HTTP only on its configured bind address; it does not terminate TLS. Keep the default loopback bind, restrict the public proxy to your management network or VPN, and do not expose port `3020` directly.
 
 ## Operational checklist
 
 - [ ] TLS proxy in front; server bound to loopback.
 - [ ] `DXM_PUBLIC_URL` exactly matches the proxy's public HTTPS origin and preserved `Host`.
+- [ ] App manifest sets `requestedAccessTokenVersion` to `2`.
 - [ ] OBO secret/cert in a secret manager, rotated per your policy.
 - [ ] `audit.jsonl` shipped to your log platform (it's append-only JSONL — trivial to forward).
 - [ ] Conditional Access applies to the app's sign-ins — verify your policies cover it.

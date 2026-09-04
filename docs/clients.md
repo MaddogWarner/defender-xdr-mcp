@@ -1,6 +1,12 @@
 # Connecting AI clients
 
-All local (stdio) configs share the same shape: run `node /path/to/defender-xdr-mcp/dist/index.js` with `DXM_TENANT_ID` and `DXM_CLIENT_ID` in the environment. After connecting, call `get_connection_status` and watch the client's MCP log/console for any Graph or MDE device-code prompt (it's printed to stderr).
+All local (stdio) configs share the same shape: run `node /path/to/defender-xdr-mcp/dist/index.js` with `DXM_TENANT_ID` and `DXM_CLIENT_ID` in the environment. Before connecting a client, use the same environment in a terminal and run:
+
+```bash
+node /path/to/defender-xdr-mcp/dist/index.js --sign-in
+```
+
+Complete any Graph and MDE device-code prompts. The command exits after both resources authenticate and stores the tokens in the encrypted OS keystore cache. After connecting, use `get_connection_status` for in-session status or reactivation.
 
 ## Claude Code (CLI / VS Code extension)
 
