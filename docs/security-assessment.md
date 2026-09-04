@@ -1,6 +1,6 @@
-# Security assessment pack — defender-xdr-mcp v1.0.0
+# Security assessment pack — defender-xdr-mcp v1.1.0
 
-**Prepared:** 31/08/2026 · **Applies to:** v1.0.0 · **Status:** pre-production, not yet live-verified
+**Prepared:** 04/09/2026 · **Applies to:** v1.1.0 · **Status:** pre-production, not yet live-verified
 
 This document exists so a security assessor can evaluate this product without reading the source. It provides the architecture, data flows, control inventory, verification status, supply-chain position and a pre-filled risk register.
 

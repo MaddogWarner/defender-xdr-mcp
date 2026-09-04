@@ -39,7 +39,7 @@ docker compose up -d
 
 The compose file publishes `127.0.0.1:3020` only, runs the container as non-root with a read-only rootfs, drops all capabilities, and persists the audit log to a named volume.
 
-The container health check calls the unauthenticated bare path `GET /healthz` over loopback. A healthy v1.0.0 process returns only `{"version":"1.0.0"}`. Queries, subpaths and non-GET methods do not share this Host-check bypass.
+The container health check calls the unauthenticated bare path `GET /healthz` over loopback. A healthy v1.1.0 process returns only `{"version":"1.1.0"}`. Queries, subpaths and non-GET methods do not share this Host-check bypass.
 
 ## TLS reverse proxy
 

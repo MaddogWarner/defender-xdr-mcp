@@ -13,6 +13,7 @@ import { EntraTokenVerifier } from '../../src/auth/bearer.js';
 import type { AuthProvider } from '../../src/auth/msal.js';
 import { OboTokenCache, OnBehalfOfAuth } from '../../src/auth/obo.js';
 import { MDE_TOKEN_SCOPES } from '../../src/auth/scopes.js';
+import { SERVER_VERSION } from '../../src/tools/registry.js';
 import { ContinuationTokenStore } from '../../src/clients/continuationTokens.js';
 import { loadConfig, type AppConfig } from '../../src/config.js';
 import { DualWindowRateLimiter } from '../../src/guardrails/rateLimiter.js';
@@ -318,7 +319,7 @@ describe('HTTP Entra bearer validation', () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get('cache-control')).toBe('no-store');
-    await expect(response.json()).resolves.toEqual({ version: '1.0.0' });
+    await expect(response.json()).resolves.toEqual({ version: SERVER_VERSION });
     expect(current.create).not.toHaveBeenCalled();
   });
 
