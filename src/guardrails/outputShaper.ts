@@ -27,6 +27,25 @@ export function shapeOutput(
   config: OutputShapeConfig,
   initialNotices: readonly string[] = [],
 ): ShapedOutput {
+  const shaped = shapeOutputPage(value, config, initialNotices);
+  if (!shaped.truncated || !isRecord(value) || typeof value.continuationToken !== 'string') {
+    return shaped;
+  }
+  // An upstream cursor advances past the whole page, including omitted rows.
+  // Re-shape without it so even the preview path cannot leak a misleading cursor.
+  const page = { ...value };
+  delete page.continuationToken;
+  const notice =
+    'Pagination stopped because this page was truncated. Restart the original list with a smaller top value or narrower filters; omitted rows are not available through a next-page token.';
+  const result = shapeOutputPage(page, config, [...initialNotices, notice]);
+  return { ...result, truncated: true };
+}
+
+function shapeOutputPage(
+  value: unknown,
+  config: OutputShapeConfig,
+  initialNotices: readonly string[] = [],
+): ShapedOutput {
   const collection = findPrimaryCollection(value);
   const totalRows = collection?.rows.length ?? 1;
   const rows = collection?.rows.slice(0, config.maxRows);

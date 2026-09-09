@@ -17,8 +17,7 @@ interface RateLimiterOptions {
 }
 
 interface FamilyState {
-  minuteTokens: number;
-  lastRefill: number;
+  minuteAttempts: number[];
   hourlyAttempts: number[];
 }
 
@@ -53,7 +52,6 @@ export class DualWindowRateLimiter implements RequestRateLimiter {
   #lock: Promise<void> = Promise.resolve();
 
   constructor(limits: RateLimitConfiguration, options: RateLimiterOptions = {}) {
-    const started = options.now?.() ?? Date.now();
     this.#limits = limits;
     this.#now = options.now ?? Date.now;
     this.#sleep =
@@ -61,9 +59,9 @@ export class DualWindowRateLimiter implements RequestRateLimiter {
       ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
     this.#maxWaitMs = options.maxWaitMs ?? 5_000;
     this.#states = {
-      hunting: createState(limits.hunting.requestsPerMinute, started),
-      'graph-other': createState(limits['graph-other'].requestsPerMinute, started),
-      mde: createState(limits.mde.requestsPerMinute, started),
+      hunting: createState(),
+      'graph-other': createState(),
+      mde: createState(),
     };
   }
 
@@ -89,7 +87,7 @@ export class DualWindowRateLimiter implements RequestRateLimiter {
       const state = this.#states[family];
       const limit = this.#limits[family];
       windows[family] = {
-        minuteRemaining: Math.max(0, Math.floor(state.minuteTokens)),
+        minuteRemaining: Math.max(0, limit.requestsPerMinute - state.minuteAttempts.length),
         hourRemaining: Math.max(0, limit.requestsPerHour - state.hourlyAttempts.length),
       };
     }
@@ -115,10 +113,11 @@ export class DualWindowRateLimiter implements RequestRateLimiter {
     this.#refresh(family, now);
     const state = this.#states[family];
     const limit = this.#limits[family];
+    const oldestMinuteAttempt = state.minuteAttempts[0];
     const minuteWait =
-      state.minuteTokens >= 1
+      state.minuteAttempts.length < limit.requestsPerMinute || oldestMinuteAttempt === undefined
         ? 0
-        : Math.ceil((1 - state.minuteTokens) * (MINUTE_MS / limit.requestsPerMinute));
+        : Math.max(1, oldestMinuteAttempt + MINUTE_MS - now);
     const oldestAttempt = state.hourlyAttempts[0];
     const hourWait =
       state.hourlyAttempts.length < limit.requestsPerHour || oldestAttempt === undefined
@@ -127,7 +126,7 @@ export class DualWindowRateLimiter implements RequestRateLimiter {
     const wait = Math.max(minuteWait, hourWait);
     if (wait > 0) return wait;
 
-    state.minuteTokens -= 1;
+    state.minuteAttempts.push(now);
     state.hourlyAttempts.push(now);
     this.#attempts[family] += 1;
     return 0;
@@ -135,13 +134,9 @@ export class DualWindowRateLimiter implements RequestRateLimiter {
 
   #refresh(family: ApiFamily, now: number): void {
     const state = this.#states[family];
-    const limit = this.#limits[family];
-    const elapsed = Math.max(0, now - state.lastRefill);
-    state.minuteTokens = Math.min(
-      limit.requestsPerMinute,
-      state.minuteTokens + elapsed * (limit.requestsPerMinute / MINUTE_MS),
-    );
-    state.lastRefill = now;
+    while (state.minuteAttempts[0] !== undefined && state.minuteAttempts[0] <= now - MINUTE_MS) {
+      state.minuteAttempts.shift();
+    }
     while (state.hourlyAttempts[0] !== undefined && state.hourlyAttempts[0] <= now - HOUR_MS) {
       state.hourlyAttempts.shift();
     }
@@ -158,6 +153,6 @@ export class DualWindowRateLimiter implements RequestRateLimiter {
 
 const apiFamilies: readonly ApiFamily[] = ['hunting', 'graph-other', 'mde'];
 
-function createState(requestsPerMinute: number, now: number): FamilyState {
-  return { minuteTokens: requestsPerMinute, lastRefill: now, hourlyAttempts: [] };
+function createState(): FamilyState {
+  return { minuteAttempts: [], hourlyAttempts: [] };
 }

@@ -223,5 +223,6 @@ describe('DeviceCodeAuth', () => {
     await auth.getTokenSilently('mde');
 
     expect(acquireTokenSilent).toHaveBeenCalledTimes(3);
+    expect(acquireTokenSilent.mock.calls[2]?.[0].forceRefresh).toBe(true);
   });
 });

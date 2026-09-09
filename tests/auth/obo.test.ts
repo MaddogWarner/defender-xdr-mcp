@@ -220,3 +220,23 @@ describe('OnBehalfOfAuth', () => {
     expect(acquireTokenOnBehalfOf).toHaveBeenCalledTimes(2);
   });
 });
+
+it('bypasses MSAL cache after invalidation, including a subsequent HTTP request', async () => {
+  const acquireTokenOnBehalfOf = vi.fn((request: OnBehalfOfRequest) =>
+    Promise.resolve(result(request.scopes, request.skipCache ? 'fresh' : 'stale')),
+  );
+  const cache = new OboTokenCache();
+  const makeAuth = () =>
+    new OnBehalfOfAuth(
+      { acquireTokenOnBehalfOf },
+      'assertion',
+      'analyst@example.com',
+      INBOUND_EXPIRY,
+      cache,
+      () => NOW_MS,
+    );
+  const first = makeAuth();
+  await first.getToken('graph');
+  first.invalidate('graph');
+  expect((await makeAuth().getToken('graph')).accessToken).toBe('fresh');
+});

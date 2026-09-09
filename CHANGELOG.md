@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 09/09/2026
+
+### Fixed
+
+- Enforce rolling minute request limits so an initial burst plus refills cannot exceed the configured RPM; retain rolling hour limits and retry accounting.
+- Withhold continuation tokens on truncated list pages and require a smaller-page restart, preventing next-page navigation from skipping omitted records.
+- Force MSAL silent refresh after stdio token invalidation and bypass MSAL's secondary OBO cache when the shared bounded cache needs a new token.
+
 ## [1.1.0] - 04/09/2026
 
 ### Fixed
