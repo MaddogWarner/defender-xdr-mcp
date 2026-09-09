@@ -17,8 +17,8 @@ jobs:
       # libsecret on Linux. Without it every test file that reaches the auth
       # modules fails to import. macOS and Windows use Keychain/DPAPI instead.
       - run: sudo apt-get update && sudo apt-get install -y libsecret-1-0
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
