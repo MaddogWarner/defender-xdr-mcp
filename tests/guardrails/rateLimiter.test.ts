@@ -21,16 +21,19 @@ describe('DualWindowRateLimiter', () => {
       name: 'LocalRateLimitError',
       family: 'hunting',
       window: 'minute',
-      retryAfterSeconds: 30,
+      retryAfterSeconds: 60,
     });
   });
 
-  it('refills minute capacity over time', async () => {
+  it('releases minute capacity only when attempts leave the rolling window', async () => {
     let now = 0;
     const limiter = new DualWindowRateLimiter(limits, { now: () => now, maxWaitMs: 0 });
     await limiter.acquire('mde');
     await limiter.acquire('mde');
-    now = 30_000;
+    now = 59_999;
+    await expect(limiter.acquire('mde')).rejects.toMatchObject({ window: 'minute' });
+    expect(limiter.state().windows?.mde.minuteRemaining).toBe(0);
+    now = 60_000;
     await expect(limiter.acquire('mde')).resolves.toBeUndefined();
     expect(limiter.state().attempts.mde).toBe(3);
   });

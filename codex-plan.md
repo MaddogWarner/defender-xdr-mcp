@@ -334,3 +334,13 @@ All of these are required for shared mode to work as documented or for the live 
 ## Out of scope (do not build)
 
 Secure Score tools; any write/response action; app-only auth; multi-tenant support; a web UI; metrics/telemetry emission from the server itself; npm publishing (decided at Phase 6).
+
+## Review remediation — David request, 09/09/2026
+
+Scope: the three findings from Codex's 08/09/2026 production-readiness review, authorised for correction by David in this task. These amendments replace token-bucket minute admission with a rolling window and stop pagination on a truncated page; delegated scopes, KQL policy and architecture otherwise stay unchanged.
+
+- Minute limits: rolling 60-second window, preserving hour accounting, serialisation and bounded waiting.
+- Pagination: suppress the next-page cursor on truncation and instruct a smaller-page restart. No result caching or persistence introduced.
+- Authentication: stdio invalidation forces MSAL refresh; OBO acquisitions bypass MSAL's secondary cache while retaining the existing shared bounded cache.
+
+Status: implementation complete; regression tests reproduced six failures before the fixes. Final local verification passed using installed tool binaries: ESLint, Prettier, TypeScript typecheck, 22 test files / 173 tests, coverage (99.22% guardrail lines; 97.22% audit lines), and build. The added HTTP-client tests prove a 401 retry uses a refreshed token for both stdio and OBO and consumes limiter capacity. Production-tenant and mounted-volume gates remain **DEFERRED**. No commit, push, version bump or release; ready for Claude review.

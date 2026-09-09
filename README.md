@@ -11,7 +11,7 @@ Bring your own AI to your Defender telemetry. If your org runs Microsoft 365 E5 
 
 > **Read this before you deploy — where your data actually goes.** This server does not transmit telemetry to any third party. Your **AI client** does. The entire purpose of an MCP server is to feed tool results to a model, so whatever Defender data a tool returns is sent by your AI client to whichever model provider it uses (Anthropic, OpenAI, Google, or a model you host yourself). Self-hosting this server removes one hop, not that one. Assess the AI client and its provider as part of the same decision — see [`docs/security-assessment.md`](docs/security-assessment.md), risk **R1**.
 >
-> **Verification status (04/09/2026).** v1.1.0 has passed lint, strict typecheck, 166 unit tests, 98.96 % line coverage across guardrails and audit, and CI container build/start/health/non-root checks. It **has never been run against a live Microsoft 365 tenant**, and the mounted-volume audit-write check remains deferred. Those gates are documented in [`docs/live-test-runbook.md`](docs/live-test-runbook.md). Treat this as pre-production software until that runbook is completed and signed off.
+> **Verification status (09/09/2026).** v1.1.1 has passed lint, strict typecheck, 173 unit tests, 99.22 % guardrail line coverage, and CI container build/start/health/non-root checks. It **has never been run against a live Microsoft 365 tenant**, and the mounted-volume audit-write check remains deferred. Those gates are documented in [`docs/live-test-runbook.md`](docs/live-test-runbook.md). Treat this as pre-production software until that runbook is completed and signed off.
 >
 > **Disclaimer:** this is an independent open-source project. It is not affiliated with, endorsed by, or supported by Microsoft. "Microsoft Defender" is a trademark of Microsoft Corporation.
 
@@ -177,7 +177,7 @@ Microsoft's hunting quota is tenant-wide, while local stdio limiting is per serv
 ## Security model, in brief
 
 - **Least privilege:** delegated read scopes only; Defender RBAC decides what each user sees; no app-only access exists.
-- **Quota safety:** client-side token buckets sit below Microsoft's published limits (advanced hunting ≈ 45 calls/min and CPU-time quotas per tenant), with `Retry-After` honoured — one enthusiastic agent can't starve your SOC's API quota.
+- **Quota safety:** rolling minute and hour request windows enforce the configured per-process budgets, with retries charged to both windows. Leave tenant-wide headroom for other processes and the Defender portal; request limits do not bound query CPU consumption.
 - **Bounded output:** row and byte caps with explicit truncation notices stop bulk telemetry extraction and keep the AI's context intact.
 - **Audit:** every tool call is appended to a local JSONL log — timestamp, user, tool, query text, row count, status. Result content is never logged.
 - **Audit-log sensitivity:** query text can contain hostnames, UPNs, device identifiers, or patient-adjacent search terms. Restrict access to the log and apply your organisation's healthcare-data retention, forwarding, and disposal policy.
@@ -190,6 +190,10 @@ Microsoft's hunting quota is tenant-wide, while local stdio limiting is per serv
 - _Empty hunting results but no error:_ check the user's Defender role and device-group access — RBAC applies server-side at Microsoft.
 - _429s despite the limiter:_ the Microsoft hunting quota is tenant-wide but stdio limits are per process. Set each analyst's `DXM_HUNTING_RPM` below `45 ÷ concurrent analysts`, leave portal headroom, and remember incidents and alerts use the same budget. HTTP mode already shares one process-wide budget.
 - _HTTP 400 after raising `DXM_MAX_ROWS`:_ Microsoft Graph list endpoints impose their own page-size maximums. Lower `DXM_MAX_ROWS` or the tool's `top` value.
+
+### Truncated list pages
+
+If a list page exceeds the row or byte cap, its continuation token is withheld because it would skip the omitted records. Restart the original list without a continuation token, using a smaller `top` or narrower filters. A truncation warning means the output is incomplete; do not treat it as a complete inventory. No omitted telemetry is cached for later retrieval.
 
 ## Contributing & licence
 

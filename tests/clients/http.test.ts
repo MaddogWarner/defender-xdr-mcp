@@ -1,3 +1,6 @@
+import type { AuthenticationResult, SilentFlowRequest, OnBehalfOfRequest } from '@azure/msal-node';
+import { DeviceCodeAuth } from '../../src/auth/msal.js';
+import { OnBehalfOfAuth, OboTokenCache } from '../../src/auth/obo.js';
 import { z } from 'zod';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -218,3 +221,79 @@ describe('MicrosoftHttpClient', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+it.each(['stdio', 'obo'])(
+  'refreshes the rejected token through the real %s provider and charges the retry',
+  async (mode) => {
+    const account = {
+      homeAccountId: 'test',
+      environment: 'login.microsoftonline.com',
+      tenantId: 'test',
+      username: 'test@example.invalid',
+      localAccountId: 'test',
+    };
+    const result = (fresh: boolean): AuthenticationResult => ({
+      authority: 'https://login.microsoftonline.com/test',
+      uniqueId: account.localAccountId,
+      tenantId: account.tenantId,
+      idToken: 'synthetic-id-token',
+      idTokenClaims: {},
+      fromCache: false,
+      tokenType: 'Bearer',
+      correlationId: 'test',
+      accessToken: fresh ? 'fresh-token' : 'rejected-token',
+      account,
+      scopes: [],
+      expiresOn: new Date(Date.now() + 3600000),
+    });
+    let exchanges = 0;
+    const auth =
+      mode === 'stdio'
+        ? new DeviceCodeAuth({
+            getAllAccounts: () => Promise.resolve([account]),
+            acquireTokenSilent: (request: SilentFlowRequest) =>
+              Promise.resolve(result(request.forceRefresh === true)),
+            acquireTokenByDeviceCode: () => Promise.resolve(null),
+          })
+        : new OnBehalfOfAuth(
+            {
+              acquireTokenOnBehalfOf: (request: OnBehalfOfRequest) =>
+                Promise.resolve(result(++exchanges > 1 && request.skipCache === true)),
+            },
+            'assertion',
+            account.username,
+            Date.now() / 1000 + 3600,
+            new OboTokenCache(),
+          );
+    const headers: string[] = [];
+    const fetchMock = vi.fn<typeof fetch>((_url, options) => {
+      const header = new Headers(options?.headers).get('Authorization') ?? '';
+      headers.push(header);
+      return Promise.resolve(
+        header === 'Bearer fresh-token'
+          ? Response.json({ value: 'ok' })
+          : new Response('{}', { status: 401 }),
+      );
+    });
+    const limiter = new CountingRateLimiter();
+    const client = new MicrosoftHttpClient(
+      'https://graph.microsoft.com',
+      {
+        getToken: async () => (await auth.getTokenSilently('graph')).accessToken,
+        invalidate: () => auth.invalidate('graph'),
+      },
+      limiter,
+      { fetch: fetchMock },
+    );
+    await expect(
+      client.request({
+        path: '/v1.0/security/incidents',
+        method: 'GET',
+        family: 'graph-other',
+        schema: responseSchema,
+      }),
+    ).resolves.toEqual({ value: 'ok' });
+    expect(headers).toEqual(['Bearer rejected-token', 'Bearer fresh-token']);
+    expect(limiter.state().attempts['graph-other']).toBe(2);
+  },
+);

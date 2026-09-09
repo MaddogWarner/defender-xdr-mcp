@@ -60,6 +60,7 @@ function scopesFor(resource: TokenResource): string[] {
 export class DeviceCodeAuth {
   readonly #application: TokenApplication;
   #account: AccountInfo | undefined;
+  readonly #forceRefresh = new Set<TokenResource>();
   readonly #results = new Map<TokenResource, AccessTokenContext>();
 
   constructor(application: TokenApplication) {
@@ -76,6 +77,7 @@ export class DeviceCodeAuth {
 
   invalidate(resource: TokenResource): void {
     this.#results.delete(resource);
+    this.#forceRefresh.add(resource);
   }
 
   async hasUsableToken(resource: TokenResource): Promise<boolean> {
@@ -114,7 +116,11 @@ export class DeviceCodeAuth {
     let result: AuthenticationResult | null = null;
     if (account !== undefined) {
       try {
-        result = await this.#application.acquireTokenSilent({ account, scopes });
+        result = await this.#application.acquireTokenSilent({
+          account,
+          scopes,
+          forceRefresh: this.#forceRefresh.has(resource),
+        });
       } catch (error: unknown) {
         if (!requiresInteraction(error)) {
           throw error;
@@ -147,6 +153,7 @@ export class DeviceCodeAuth {
       ...(result.expiresOn === null ? {} : { expiresOn: result.expiresOn }),
     };
     this.#account = result.account;
+    this.#forceRefresh.delete(resource);
     this.#results.set(resource, token);
     return token;
   }
