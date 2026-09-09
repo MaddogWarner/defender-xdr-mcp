@@ -179,6 +179,9 @@ export class OnBehalfOfAuth implements AuthProvider {
     let result: AuthenticationResult | null;
     try {
       result = await this.#application.acquireTokenOnBehalfOf({
+        // The bounded shared cache above owns reuse; do not resurrect invalidated
+        // tokens from MSAL's separate cache, including across HTTP requests.
+        skipCache: true,
         oboAssertion: this.#assertion,
         scopes: resource === 'graph' ? [...GRAPH_SCOPES] : [...MDE_TOKEN_SCOPES],
       });

@@ -82,3 +82,34 @@ describe('shapeOutput', () => {
     );
   });
 });
+
+it.each([1, 1000])('removes next-page cursors when rows are truncated (cap %s)', (maxRows) => {
+  const value = {
+    value: Array.from({ length: 10 }, (_, id) => ({ id, data: 'x'.repeat(100) })),
+    continuationToken: 'next-page-token',
+  };
+  const shaped = shapeOutput(value, { maxRows, maxResponseBytes: 700 });
+  expect(shaped.truncated).toBe(true);
+  expect(shaped.text).not.toContain('next-page-token');
+  expect(shaped.notices.join(' ')).toContain('Restart');
+  expect(Buffer.byteLength(shaped.text)).toBeLessThanOrEqual(700);
+});
+it('preserves a continuation token when every page row fits', () => {
+  const shaped = shapeOutput(
+    { value: [{ id: '1' }], continuationToken: 'next-page-token' },
+    { maxRows: 10, maxResponseBytes: 4096 },
+  );
+  expect(shaped.text).toContain('next-page-token');
+  expect(shaped.truncated).toBe(false);
+});
+
+it('does not expose a next-page token through a truncated preview', () => {
+  const shaped = shapeOutput(
+    { continuationToken: 'cursor-must-not-leak', metadata: 'x'.repeat(2000), value: [{ id: 1 }] },
+    { maxRows: 10, maxResponseBytes: 700 },
+  );
+  expect(shaped.truncated).toBe(true);
+  expect(shaped.text).toContain('truncatedPreview');
+  expect(shaped.text).not.toContain('cursor-must-not-leak');
+  expect(shaped.notices.join(' ')).toContain('Restart');
+});
