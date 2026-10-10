@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] - 10/10/2026
+
+### Security
+
+- Strengthened KQL external-data validation in `run_hunting_query` (GHSA-v95r-2cwr-x73x).
+
 ## [1.1.1] - 09/09/2026
 
 ### Fixed

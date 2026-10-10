@@ -10,6 +10,16 @@ export type KqlValidationResult =
   | { ok: true; query: string; timespan: string; notices: readonly string[] }
   | { ok: false; reason: string };
 
+const EXTERNAL_ACCESS_IDENTIFIERS = new Set([
+  'externaldata',
+  'externaltable',
+  'externaldatatable',
+  'inlineexternaltable',
+  'adx',
+  'cluster',
+  'database',
+]);
+
 export function validateKql(
   query: unknown,
   timespan: unknown,
@@ -22,19 +32,27 @@ export function validateKql(
   const stripped = stripStringsAndComments(query);
   if (!stripped.ok) return stripped;
   const visibleQuery = stripped.query;
-  if (/\bexternaldata\b/i.test(visibleQuery)) {
-    return {
-      ok: false,
-      reason:
-        'The externaldata operator is not allowed because it can retrieve data from external locations. Use a Defender XDR table instead.',
-    };
-  }
-  if (/\badx\s*\(/i.test(visibleQuery)) {
-    return {
-      ok: false,
-      reason:
-        'The adx() function is not allowed because it can retrieve data from an external Azure Data Explorer cluster. Use a Defender XDR table instead.',
-    };
+  const tokens = [...visibleQuery.matchAll(/[a-zA-Z0-9_]+|\[\s*\](?=\s*\()|[^\s]/g)].map(
+    (match) => {
+      const token = match[0];
+      // The scanner masks quoted names too. Recover only bracketed call names,
+      // using the original offsets, so dynamic-array string values stay masked.
+      const identifier = token.startsWith('[')
+        ? bracketedCallName(query.slice(match.index, match.index + token.length))
+        : token;
+      return identifier.toLowerCase().replaceAll('_', '');
+    },
+  );
+  let evaluating = false;
+  for (const token of tokens) {
+    if (token === 'evaluate') evaluating = true;
+    if (token === '(' || token === '|' || token === ';') evaluating = false;
+    if (EXTERNAL_ACCESS_IDENTIFIERS.has(token) || (evaluating && /request(?:post)?$/.test(token))) {
+      return {
+        ok: false,
+        reason: `External data access (${token}) is not allowed. Use a Defender XDR table instead.`,
+      };
+    }
   }
 
   const requestedTimespan = timespan ?? config.defaultTimespan;
@@ -76,6 +94,39 @@ export function validateKql(
   }
 
   return { ok: true, query: guardedQuery, timespan: effectiveTimespan, notices };
+}
+
+function bracketedCallName(token: string): string {
+  const parts: string[] = [];
+  // Reuse the same scanner for comments and adjacent literals in quoted names.
+  stripStringsAndComments(token, (literal) => {
+    if (literal.startsWith('```')) {
+      parts.push(literal.slice(3, -3));
+      return;
+    }
+    const content = literal.replace(/^[hH]?@?['"]|['"]$/g, '');
+    if (/^[hH]?@/.test(literal)) {
+      const quote = literal.at(-1)!;
+      parts.push(content.replaceAll(quote + quote, quote));
+      return;
+    }
+    // Kusto uses fixed-width hex escapes and up to three octal digits.
+    parts.push(
+      content.replace(
+        /\\(u[\da-fA-F]{4}|x[\da-fA-F]{2}|[0-9]{1,3}|[\s\S])/g,
+        (_, escape: string) => {
+          if (escape.startsWith('u') || escape.startsWith('x')) {
+            return String.fromCharCode(Number.parseInt(escape.slice(1), 16));
+          }
+          if (/^[0-9]/.test(escape)) {
+            return String.fromCharCode(Number.parseInt(escape, 8));
+          }
+          return /^[abfnrtv]$/.test(escape) ? ' ' : escape;
+        },
+      ),
+    );
+  });
+  return parts.join('');
 }
 
 function trailingOuterRenderPipeIndex(query: string): number | undefined {
@@ -141,10 +192,14 @@ type ScannerState =
   | 'verbatim-double'
   | 'multiline';
 
-function stripStringsAndComments(query: string): StripResult {
+function stripStringsAndComments(
+  query: string,
+  onLiteral?: (literal: string) => void,
+): StripResult {
   let result = '';
   let index = 0;
   let state: ScannerState = 'code';
+  let literalIndex = 0;
 
   while (index < query.length) {
     const current = query[index] ?? '';
@@ -157,6 +212,7 @@ function stripStringsAndComments(query: string): StripResult {
         continue;
       }
       if (query.startsWith('```', index)) {
+        literalIndex = index;
         state = 'multiline';
         result += '   ';
         index += 3;
@@ -164,6 +220,7 @@ function stripStringsAndComments(query: string): StripResult {
       }
       const literal = literalStart(query, index);
       if (literal !== undefined) {
+        literalIndex = index;
         state = literal.state;
         result += mask(query.slice(index, index + literal.length));
         index += literal.length;
@@ -187,6 +244,7 @@ function stripStringsAndComments(query: string): StripResult {
 
     if (state === 'multiline') {
       if (query.startsWith('```', index)) {
+        onLiteral?.(query.slice(literalIndex, index + 3));
         state = 'code';
         result += '   ';
         index += 3;
@@ -209,7 +267,10 @@ function stripStringsAndComments(query: string): StripResult {
       index += 2;
       continue;
     }
-    if (current === quote) state = 'code';
+    if (current === quote) {
+      onLiteral?.(query.slice(literalIndex, index + 1));
+      state = 'code';
+    }
     result += ' ';
     index += 1;
   }
