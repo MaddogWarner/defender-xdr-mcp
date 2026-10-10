@@ -133,6 +133,7 @@ Microsoft does not document OData `$top` or `$filter` support for software, secu
 Expected before testing:
 
 - `externaldata` is rejected before a Microsoft query is sent.
+- `external_data` (the alias) is rejected before a Microsoft query is sent.
 - `adx()` is rejected before a Microsoft query is sent.
 - A wide response is truncated with a notice stating rows returned versus total and how to narrow the query.
 - `audit.jsonl` gains one JSON object per attempted tool call, including the rejected call. No result row content is logged.

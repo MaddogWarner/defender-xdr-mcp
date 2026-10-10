@@ -23,6 +23,102 @@ describe('validateKql', () => {
   });
 
   it.each([
+    'external_data(x:string)',
+    'External_Data(x:string)',
+    'external_datatable(x:string)',
+    'inline_external_table(x:string)',
+    "external_table('x')",
+    "cluster('c').database('d').T",
+    "database('d').T",
+    "cluster ('c').T",
+    "database\n('d').T",
+    'DeviceInfo | evaluate http_request()',
+    'DeviceInfo | evaluate http_request_post()',
+    'DeviceInfo | evaluate sql_request()',
+    'DeviceInfo | evaluate cosmosdb_sql_request()',
+    'DeviceInfo | evaluate mysql_request()',
+    'DeviceInfo | evaluate postgresql_request()',
+    'DeviceInfo | evaluate future_request()',
+    'DeviceInfo | evaluate   http_request()',
+    'DeviceInfo | EVALUATE HTTP_REQUEST_POST()',
+    'DeviceInfo | evaluate // plugin\nhttp_request()',
+    "['external_data'](x:string)",
+    '["External_Table"]("x")',
+    "['cluster']('c').T",
+    "['clu' 'ster']('c').T",
+    "['cluster' // name\n]('c').T",
+    "['cluster'] // call\n('c').T",
+    "DeviceInfo | evaluate hint.distribution=single http_request('x')",
+    "DeviceInfo | evaluate hint.remote=local ['http_request_post']('x')",
+    "[ 'database' ]\n('d').T",
+    "DeviceInfo | evaluate ['http_request']()",
+    String.raw`['clu\u0073ter']('c').T`,
+    String.raw`['clu\x73ter']('c').T`,
+    String.raw`['clu\163ter']('c').T`,
+    String.raw`['clu\ster']('c').T`,
+    "[@'cluster']('c').T",
+    '[h@"database"]("d").T',
+    '[```cluster```]("c").T',
+    'DeviceInfo | project adx = DeviceName',
+  ])('rejects a blocked whole identifier: %s', (query) => {
+    const result = validateKql(query, undefined, config);
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.reason).toMatch(
+      /^External data access \([a-z]+\) is not allowed\. Use a Defender XDR table instead\.$/,
+    );
+  });
+
+  const deniedNames = [
+    'externaldata',
+    'external_data',
+    'external_table',
+    'external_datatable',
+    'inline_external_table',
+    'adx',
+    'cluster',
+    'database',
+    'evaluate http_request',
+    'evaluate http_request_post',
+    'evaluate sql_request',
+    'evaluate cosmosdb_sql_request',
+    'evaluate mysql_request',
+    'evaluate postgresql_request',
+  ];
+  it.each(deniedNames)('ignores %s in all supported literal and comment forms', (name) => {
+    for (const query of [
+      `print value='${name}'`,
+      `print value="${name}"`,
+      `print value=@'${name}'`,
+      `print value=@"${name}"`,
+      `print value=h'${name}'`,
+      `print value=h"${name}"`,
+      `print value=H@'${name}'`,
+      `print value=h@"${name}"`,
+      'print value=```' + name + '```',
+      `DeviceInfo // ${name}\n| take 5`,
+      `print value=dynamic(["${name}"])`,
+      `print value="['${name}']()"`,
+    ])
+      expect(validateKql(query, undefined, config).ok, query).toBe(true);
+  });
+
+  it.each([
+    'DeviceInfo | evaluate bag_unpack(x)',
+    'DeviceInfo | evaluate autocluster()',
+    'DeviceInfo | evaluate basket()',
+    'DeviceInfo | evaluate ["bag_unpack"](x)',
+    'DeviceInfo | project ExternalDataSize, my_cluster, database_count, adx_result',
+    'DeviceInfo | project ["ExternalDataSize"]',
+    'DeviceInfo | evaluate http_request_count()',
+    'DeviceInfo | extend http_request = 1',
+    'print value=1',
+    'DeviceInfo | extend value=[@"safe""name"]()',
+    String.raw`DeviceInfo | extend value=['safe\nname']()`,
+  ])('allows legitimate identifiers and plugins: %s', (query) => {
+    expect(validateKql(query, undefined, config).ok).toBe(true);
+  });
+
+  it.each([
     `print value='externaldata(value:string)'`,
     `print value="externaldata(value:string)"`,
     `DeviceInfo // externaldata(value:string)\n| take 5`,
@@ -67,16 +163,14 @@ adx('cluster/database').Table`,
   ])('rejects adx() calls outside Kusto literals and comments', (query) => {
     expect(validateKql(query, undefined, config)).toEqual({
       ok: false,
-      reason:
-        'The adx() function is not allowed because it can retrieve data from an external Azure Data Explorer cluster. Use a Defender XDR table instead.',
+      reason: 'External data access (adx) is not allowed. Use a Defender XDR table instead.',
     });
   });
 
   it.each([
-    'DeviceInfo | project adx = DeviceName',
     `DeviceInfo // adx('cluster/database').Table\n| take 5`,
     `print value="adx('cluster/database').Table"`,
-  ])('allows adx identifiers and references inside literals or comments', (query) => {
+  ])('allows adx references inside literals or comments', (query) => {
     expect(validateKql(query, undefined, config).ok).toBe(true);
   });
 
