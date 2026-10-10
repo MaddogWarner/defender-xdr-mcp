@@ -19,7 +19,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@azure/msal-node": "^6.0.0",
+    "@azure/msal-node": "^7.0.1",
     "@azure/msal-node-extensions": "^5.5.2",
     "@modelcontextprotocol/node": "^2.1.1",
     "@modelcontextprotocol/server": "^2.3.1",
