@@ -33,18 +33,18 @@ The server signs the analyst in with their own Entra ID identity (device-code fl
 
 ## Tools
 
-| Tool                              | What it does                                                                                                                                 |
-| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `run_hunting_query`               | Run KQL against the advanced hunting tables (30-day window). Guardrailed: timespan capped, row-limited, `externaldata` and `adx()` rejected. |
-| `list_hunting_tables`             | Bundled schema reference for the advanced hunting tables — lets the AI write correct KQL without trial-and-error.                            |
-| `list_incidents` / `get_incident` | Browse and read incidents (filter by status, severity, assignment, time); incident detail includes correlated alerts.                        |
-| `list_alerts` / `get_alert`       | Browse and read alerts with evidence.                                                                                                        |
-| `list_vulnerabilities`            | Org-wide CVEs from Defender Vulnerability Management (filter by severity or CVE ID; returned exploit and EPSS fields support analysis).      |
-| `list_vulnerable_devices`         | Devices exposed to a given CVE.                                                                                                              |
-| `list_devices` / `get_device`     | Device inventory (filter by risk score, exposure level, OS); device detail includes its discovered vulnerabilities.                          |
-| `list_software`                   | Software inventory with weaknesses and exposure.                                                                                             |
-| `list_security_recommendations`   | Defender's prioritised remediation recommendations.                                                                                          |
-| `get_connection_status`           | In-session Graph and MDE status/reactivation tool; returns tenant, signed-in user, per-resource scopes, and rate-limiter state.              |
+| Tool                              | What it does                                                                                                                                             |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `run_hunting_query`               | Run KQL against the advanced hunting tables (30-day window). Guardrailed: timespan capped, row-limited, external data access rejected (see SECURITY.md). |
+| `list_hunting_tables`             | Bundled schema reference for the advanced hunting tables — lets the AI write correct KQL without trial-and-error.                                        |
+| `list_incidents` / `get_incident` | Browse and read incidents (filter by status, severity, assignment, time); incident detail includes correlated alerts.                                    |
+| `list_alerts` / `get_alert`       | Browse and read alerts with evidence.                                                                                                                    |
+| `list_vulnerabilities`            | Org-wide CVEs from Defender Vulnerability Management (filter by severity or CVE ID; returned exploit and EPSS fields support analysis).                  |
+| `list_vulnerable_devices`         | Devices exposed to a given CVE.                                                                                                                          |
+| `list_devices` / `get_device`     | Device inventory (filter by risk score, exposure level, OS); device detail includes its discovered vulnerabilities.                                      |
+| `list_software`                   | Software inventory with weaknesses and exposure.                                                                                                         |
+| `list_security_recommendations`   | Defender's prioritised remediation recommendations.                                                                                                      |
+| `get_connection_status`           | In-session Graph and MDE status/reactivation tool; returns tenant, signed-in user, per-resource scopes, and rate-limiter state.                          |
 
 ## Prerequisites
 
@@ -181,7 +181,7 @@ Microsoft's hunting quota is tenant-wide, while local stdio limiting is per serv
 - **Bounded output:** row and byte caps with explicit truncation notices stop bulk telemetry extraction and keep the AI's context intact.
 - **Audit:** every tool call is appended to a local JSONL log — timestamp, user, tool, query text, row count, status. Result content is never logged.
 - **Audit-log sensitivity:** query text can contain hostnames, UPNs, device identifiers, or patient-adjacent search terms. Restrict access to the log and apply your organisation's healthcare-data retention, forwarding, and disposal policy.
-- **Prompt-injection posture:** telemetry fields (alert titles, file names, email subjects) can be attacker-influenced. Results are returned as clearly delimited untrusted data, and KQL routes to external data (`externaldata` and `adx()`) are rejected. Your AI harness should treat Defender output as data, not instructions — see [SECURITY.md](SECURITY.md).
+- **Prompt-injection posture:** telemetry fields (alert titles, file names, email subjects) can be attacker-influenced. Results are returned as clearly delimited untrusted data, and KQL routes to external data (`externaldata`/`external_data`, `external_table()`, `external_datatable`, `inline_external_table`, `adx()`, `cluster()`, `database()` and the `evaluate` callout plugins) are rejected on a best-effort basis. Your AI harness should treat Defender output as data, not instructions — see [SECURITY.md](SECURITY.md).
 
 ## Troubleshooting
 
