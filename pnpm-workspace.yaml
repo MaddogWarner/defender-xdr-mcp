@@ -7,3 +7,8 @@ allowBuilds:
   '@azure/msal-node-extensions': true
   esbuild: true
   keytar: true
+
+# GHSA-g3hv-75wg-m249: eslint and typescript-eslint still pin minimatch 10.x, which has no patched release.
+# Remove once they depend on minimatch >=11.0.1 themselves.
+overrides:
+  minimatch: ^11.0.8
