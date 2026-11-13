@@ -1,12 +1,13 @@
+# Base image pinned by digest; Dependabot (docker ecosystem) proposes updates.
 # Multi-stage build — final image carries dist + prod deps only, runs as non-root.
-FROM node:24-alpine AS build
+FROM node:24-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5 AS build
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN npx --yes pnpm@11.24.0 install --frozen-lockfile
 COPY . .
 RUN npx --yes pnpm@11.24.0 build && npx --yes pnpm@11.24.0 prune --prod
 
-FROM node:24-alpine
+FROM node:24-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5
 ENV NODE_ENV=production \
     DXM_TRANSPORT=http
 WORKDIR /app

@@ -4,6 +4,23 @@ All notable changes to this project are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.4] - 14/11/2026
+
+### Security
+
+- `get_incident`, `get_alert` and `get_device` reject `.` and `..` as record IDs, which URL normalisation would otherwise collapse into a different request path.
+- Untrusted-telemetry delimiters now carry a random per-response id, so telemetry containing the delimiter text cannot imitate the end of the block.
+- Audit entries record the caller's immutable Entra object ID (`oid`) alongside the UPN when it is known.
+- HTTP mode writes a one-line notice to stderr, carrying the failure code only, when a bearer token is rejected.
+- Set the MCP SDK's `maxToolInputElements` limit (GHSA-46jr-4wx8-v453).
+- GitHub Actions are pinned to commit SHAs and the container base image to a digest; Dependabot now also tracks the Docker base image.
+
+### Changed
+
+- `DXM_HUNTING_RPM`, `DXM_HUNTING_RPH`, `DXM_MDE_RPM` and `DXM_MDE_RPH` are rejected at startup above Microsoft's published quotas (45, 1,500, 50 and 1,500).
+- `run_hunting_query` rejects queries longer than 100,000 characters.
+- `get_connection_status` output includes `oid` when known.
+
 ## [1.1.3] - 13/11/2026
 
 ### Security

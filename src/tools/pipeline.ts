@@ -28,16 +28,16 @@ export type ToolPipelineResult =
   { ok: true; output: ShapedToolOutput } | { ok: false; reason: string };
 
 export class ToolPipeline {
-  readonly #getUpn: () => string | undefined;
+  readonly #getIdentity: () => { upn: string | undefined; oid?: string };
   readonly #audit: (entry: ToolAuditEntry) => Promise<void>;
   readonly #shapeConfig: OutputShapeConfig;
 
   constructor(
-    getUpn: () => string | undefined,
+    getIdentity: () => { upn: string | undefined; oid?: string },
     audit: (entry: ToolAuditEntry) => Promise<void>,
     shapeConfig: OutputShapeConfig,
   ) {
-    this.#getUpn = getUpn;
+    this.#getIdentity = getIdentity;
     this.#audit = audit;
     this.#shapeConfig = shapeConfig;
   }
@@ -52,7 +52,7 @@ export class ToolPipeline {
     } catch (error: unknown) {
       await this.#audit({
         ts: new Date().toISOString(),
-        upn: this.#getUpn() ?? null,
+        ...this.#auditIdentity(),
         tool: invocation.tool,
         args: invocation.args,
         rowCount: 0,
@@ -69,7 +69,7 @@ export class ToolPipeline {
     if (!validation.ok) {
       await this.#audit({
         ts: new Date().toISOString(),
-        upn: this.#getUpn() ?? null,
+        ...this.#auditIdentity(),
         tool: invocation.tool,
         args: invocation.args,
         rowCount: 0,
@@ -88,7 +88,7 @@ export class ToolPipeline {
       const code = errorCode(error);
       await this.#audit({
         ts: new Date().toISOString(),
-        upn: this.#getUpn() ?? null,
+        ...this.#auditIdentity(),
         tool: invocation.tool,
         args: invocation.args,
         rowCount: 0,
@@ -106,6 +106,11 @@ export class ToolPipeline {
     return { ok: true, output };
   }
 
+  #auditIdentity(): Pick<ToolAuditEntry, 'upn' | 'oid'> {
+    const { upn, oid } = this.#getIdentity();
+    return { upn: upn ?? null, ...(oid === undefined ? {} : { oid }) };
+  }
+
   #auditSuccess<TInput, TValidated, TRaw>(
     invocation: ToolInvocation<TInput, TValidated, TRaw>,
     rowCount: number,
@@ -113,7 +118,7 @@ export class ToolPipeline {
   ): Promise<void> {
     return this.#audit({
       ts: new Date().toISOString(),
-      upn: this.#getUpn() ?? null,
+      ...this.#auditIdentity(),
       tool: invocation.tool,
       args: invocation.args,
       rowCount,

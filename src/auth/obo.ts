@@ -102,6 +102,7 @@ export class OnBehalfOfAuth implements AuthProvider {
   readonly #assertion: string;
   readonly #assertionHash: string;
   readonly #upn: string;
+  readonly #oid: string | undefined;
   readonly #inboundExpiresAtMs: number;
   readonly #cache: OboTokenCache;
   readonly #now: () => number;
@@ -114,11 +115,13 @@ export class OnBehalfOfAuth implements AuthProvider {
     inboundExpiresAt: number,
     cache: OboTokenCache,
     now: () => number = Date.now,
+    oid?: string,
   ) {
     this.#application = application;
     this.#assertion = assertion;
     this.#assertionHash = createHash('sha256').update(assertion).digest('hex');
     this.#upn = upn;
+    this.#oid = oid;
     this.#inboundExpiresAtMs = inboundExpiresAt * 1000;
     this.#cache = cache;
     this.#now = now;
@@ -168,6 +171,7 @@ export class OnBehalfOfAuth implements AuthProvider {
   getConnectionStatus(): ConnectionStatus {
     return {
       upn: this.#upn,
+      ...(this.#oid === undefined ? {} : { oid: this.#oid }),
       scopes: {
         graph: this.#results.get('graph')?.grantedScopes ?? [],
         mde: this.#results.get('mde')?.grantedScopes ?? [],
@@ -241,8 +245,16 @@ export class OnBehalfOfAuthFactory {
     this.#application = application;
   }
 
-  create(assertion: string, upn: string, inboundExpiresAt: number): OnBehalfOfAuth {
-    return new OnBehalfOfAuth(this.#application, assertion, upn, inboundExpiresAt, this.#cache);
+  create(assertion: string, upn: string, inboundExpiresAt: number, oid?: string): OnBehalfOfAuth {
+    return new OnBehalfOfAuth(
+      this.#application,
+      assertion,
+      upn,
+      inboundExpiresAt,
+      this.#cache,
+      Date.now,
+      oid,
+    );
   }
 }
 

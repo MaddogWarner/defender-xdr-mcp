@@ -35,6 +35,13 @@ export const alertStatusSchema = z.enum([
   'unknownFutureValue',
 ]);
 
+// `.` and `..` survive encodeURIComponent and would be collapsed by URL normalisation.
+export const recordIdSchema = z
+  .string()
+  .min(1)
+  .max(512)
+  .regex(/^(?!\.\.?$)/, 'must not be a dot path segment');
+
 export function validateGraphAccess<T>(input: T, signedIn: boolean): ToolValidation<T> {
   return signedIn
     ? { ok: true, value: input, notices: [] }
@@ -64,7 +71,7 @@ export function registerIncidentTools(
     status: alertStatusSchema.optional(),
     ...commonListFields,
   });
-  const idSchema = z.object({ id: z.string().min(1).max(512) });
+  const idSchema = z.object({ id: recordIdSchema });
 
   registerListTool(server, 'list_incidents', incidentListInputSchema, pipeline, auth, (input) =>
     graph.listIncidents(withDefaultTop(input, config.maxRows)),

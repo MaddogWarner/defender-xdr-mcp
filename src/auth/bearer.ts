@@ -99,6 +99,8 @@ export class EntraTokenVerifier implements OAuthTokenVerifier {
           'The server cannot verify bearer tokens at present',
         );
       }
+      // Code only: never log the token or its claims.
+      this.#reportVerificationFailure(`Bearer token rejected (${verificationFailureCode(error)})`);
       throw new OAuthError(OAuthErrorCode.InvalidToken, 'The bearer token is invalid or expired');
     }
   }

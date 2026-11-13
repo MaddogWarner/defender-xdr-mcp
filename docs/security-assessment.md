@@ -1,6 +1,6 @@
-# Security assessment pack — defender-xdr-mcp v1.1.3
+# Security assessment pack — defender-xdr-mcp v1.1.4
 
-**Prepared:** 04/09/2026 · **Updated:** 13/11/2026 · **Applies to:** v1.1.3 · **Status:** pre-production, not yet live-verified
+**Prepared:** 04/09/2026 · **Updated:** 14/11/2026 · **Applies to:** v1.1.4 · **Status:** pre-production, not yet live-verified
 
 This document exists so a security assessor can evaluate this product without reading the source. It provides the architecture, data flows, control inventory, verification status, supply-chain position and a pre-filled risk register.
 
@@ -148,7 +148,7 @@ Every control below cites a location. Sample them.
 | C6  | Row cap injected when the query is unbounded, including bounds hidden in subqueries                                                              | `src/guardrails/kqlValidator.ts:82`           | Unit tested                                                                               |
 | C7  | Dual-window rate limiting (per-minute and per-hour) below Microsoft's quotas; retries consume capacity                                           | `src/guardrails/rateLimiter.ts`               | Unit tested                                                                               |
 | C8  | Response row and byte caps with explicit truncation notices                                                                                      | `src/guardrails/outputShaper.ts`              | Unit tested; 100 % line coverage                                                          |
-| C9  | API results wrapped in delimited untrusted-data blocks                                                                                           | `src/guardrails/outputShaper.ts`              | Unit tested                                                                               |
+| C9  | API results wrapped in delimited untrusted-data blocks with a random per-response id                                                             | `src/guardrails/outputShaper.ts`              | Unit tested                                                                               |
 | C10 | Mandatory fail-closed audit; a call that cannot be audited does not return                                                                       | `src/tools/pipeline.ts:104`                   | Unit tested                                                                               |
 | C11 | Audit file `0600`, append-only, size-rotated, flushed on shutdown                                                                                | `src/audit/log.ts`                            | Unit tested                                                                               |
 | C12 | Full inbound bearer validation before any downstream call                                                                                        | `src/auth/bearer.ts`                          | Unit tested                                                                               |
@@ -167,7 +167,7 @@ Every control below cites a location. Sample them.
 
 - Repository-wide lint and formatting: clean.
 - TypeScript strict compilation (`noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`): clean.
-- **246 unit tests across 22 files: passing.**
+- **255 unit tests across 22 files: passing.**
 - Coverage: **99.09 % lines overall**; guardrails 99.32 %; audit 97.22 %.
 - Production build: clean.
 - The production image builds and starts in CI with a read-only root filesystem; `/healthz` returns the exact package version and the runtime user is `node` ([CI evidence, 04/09/2026](https://github.com/MaddogWarner/defender-xdr-mcp/actions/runs/33826849251)).
@@ -187,7 +187,7 @@ Every outstanding gate is enumerated with pass/fail criteria in [`live-test-runb
 
 - **Six direct runtime dependencies:** `@azure/msal-node`, `@azure/msal-node-extensions`, `@modelcontextprotocol/server`, `@modelcontextprotocol/node`, `jose`, `zod`. All are widely used, and the Azure and MCP packages are first-party to Microsoft and Anthropic respectively.
 - **230 total components** including transitive dependencies, recorded in a CycloneDX 1.7 SBOM generated from the lockfile by pnpm's builtin tooling and attached to releases.
-- Dependencies pinned via `pnpm-lock.yaml`; container builds use `--frozen-lockfile` and a pinned package-manager version.
+- Dependencies pinned via `pnpm-lock.yaml`; container builds use `--frozen-lockfile`, a pinned package-manager version and a digest-pinned base image. GitHub Actions are pinned to commit SHAs.
 - **Dependabot** for npm and GitHub Actions, weekly. **CodeQL** static analysis on push.
 - MIT licensed; no copyleft obligations introduced.
 - Node.js ≥ 20 required. The container base image is `node:24-alpine`.
