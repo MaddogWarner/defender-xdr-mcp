@@ -242,6 +242,41 @@ adx('cluster/database').Table`,
     });
   });
 
+  it.each([
+    'print x = ~~~ " ~~~ | union (externaldata(c:string)[h@\'https://example.invalid/x.csv\']) // "',
+    'print x = ~~~ " ~~~ | union (adx(\'https://example.invalid/db\').T) // "',
+    "print x = ~~~ ' ~~~ | union (cluster('example').database('d').T) // '",
+    "[~~~externaldata~~~]('x')",
+  ])('does not let a tilde multi-line literal hide external access: %s', (query) => {
+    expect(validateKql(query, undefined, config)).toMatchObject({ ok: false });
+  });
+
+  it('masks the content of tilde multi-line literals', () => {
+    const query = 'print x = ~~~externaldata "quoted"\n``` adx(~~~ | take 5';
+    expect(validateKql(query, undefined, config)).toMatchObject({ ok: true, query });
+    expect(validateKql('print x = ~~~never closed', undefined, config)).toMatchObject({
+      ok: false,
+    });
+  });
+
+  it.each(['\r', '\u2028', '\u2029', '\r\n'])(
+    'ends a line comment at every Kusto line break: %j',
+    (lineBreak) => {
+      const query = `// note${lineBreak}externaldata(c:string)[h@'https://example.invalid/x.csv']`;
+      expect(validateKql(query, undefined, config)).toMatchObject({ ok: false });
+    },
+  );
+
+  it.each(['\n', '\r', '\\\n'])(
+    'fails closed when a single-line literal contains a raw line break: %j',
+    (lineBreak) => {
+      const query = `print x = "a${lineBreak}externaldata(c:string)[@'https://example.invalid']" | take 5`;
+      const result = validateKql(query, undefined, config);
+      expect(result.ok).toBe(false);
+      expect(!result.ok && result.reason).toContain('unterminated');
+    },
+  );
+
   it('applies the default, clamps oversized spans, and rejects invalid spans', () => {
     expect(validateKql('DeviceInfo | take 5', undefined, config)).toMatchObject({
       ok: true,

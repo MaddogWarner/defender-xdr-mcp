@@ -4,6 +4,16 @@ All notable changes to this project are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.3] - 13/11/2026
+
+### Security
+
+- Closed two KQL validator bypasses in `run_hunting_query` where the string/comment scanner disagreed with Kusto's lexer, letting a rejected external-access call hide in text the scanner treated as a literal or comment. The scanner now recognises `~~~` multi-line literals as well as triple backticks, and ends a line comment at a bare carriage return, U+2028 or U+2029 as well as a line feed.
+
+### Changed
+
+- A raw carriage return or line feed inside a single-line string literal is now rejected as an unterminated literal. Kusto ends the literal at that point, so such a query was never valid.
+
 ## [1.1.2] - 10/10/2026
 
 ### Security

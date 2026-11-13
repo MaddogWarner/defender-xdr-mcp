@@ -1,6 +1,6 @@
-# Security assessment pack — defender-xdr-mcp v1.1.0
+# Security assessment pack — defender-xdr-mcp v1.1.3
 
-**Prepared:** 04/09/2026 · **Applies to:** v1.1.0 · **Status:** pre-production, not yet live-verified
+**Prepared:** 04/09/2026 · **Updated:** 13/11/2026 · **Applies to:** v1.1.3 · **Status:** pre-production, not yet live-verified
 
 This document exists so a security assessor can evaluate this product without reading the source. It provides the architecture, data flows, control inventory, verification status, supply-chain position and a pre-filled risk register.
 
@@ -138,26 +138,26 @@ The public origin is explicitly configured (`DXM_PUBLIC_URL`), not inferred from
 
 Every control below cites a location. Sample them.
 
-| #   | Control                                                                                                     | Implementation                                | Assurance                                                                                 |
-| --- | ----------------------------------------------------------------------------------------------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| C1  | Read-only enforced at the identity layer                                                                    | Entra app registration holds only read scopes | Verifiable in your own tenant                                                             |
-| C2  | Delegated per-user auth; no standing credential                                                             | `src/auth/msal.ts`, `src/auth/obo.ts`         | Unit tested                                                                               |
-| C3  | KQL validation — rejects external data access (list in SECURITY.md)                                         | `src/guardrails/kqlValidator.ts`              | Unit tested; 100 % line coverage                                                          |
-| C4  | KQL string/comment scanner implementing real Kusto grammar; fails closed on unterminated literals           | `src/guardrails/kqlValidator.ts:112`          | Unit tested; verified by adversarial probe                                                |
-| C5  | Timespan clamped to a configured maximum                                                                    | `src/guardrails/kqlValidator.ts`              | Unit tested                                                                               |
-| C6  | Row cap injected when the query is unbounded, including bounds hidden in subqueries                         | `src/guardrails/kqlValidator.ts:64`           | Unit tested                                                                               |
-| C7  | Dual-window rate limiting (per-minute and per-hour) below Microsoft's quotas; retries consume capacity      | `src/guardrails/rateLimiter.ts`               | Unit tested                                                                               |
-| C8  | Response row and byte caps with explicit truncation notices                                                 | `src/guardrails/outputShaper.ts`              | Unit tested; 100 % line coverage                                                          |
-| C9  | API results wrapped in delimited untrusted-data blocks                                                      | `src/guardrails/outputShaper.ts`              | Unit tested                                                                               |
-| C10 | Mandatory fail-closed audit; a call that cannot be audited does not return                                  | `src/tools/pipeline.ts:104`                   | Unit tested                                                                               |
-| C11 | Audit file `0600`, append-only, size-rotated, flushed on shutdown                                           | `src/audit/log.ts`                            | Unit tested                                                                               |
-| C12 | Full inbound bearer validation before any downstream call                                                   | `src/auth/bearer.ts`                          | Unit tested                                                                               |
-| C13 | Explicit configured public origin; `Host` and `Origin` validated against it                                 | `src/http.ts:72`                              | Unit tested                                                                               |
-| C14 | Continuation URLs validated against an origin allow-list (SSRF control)                                     | `src/clients/continuationTokens.ts:71`        | Unit tested                                                                               |
-| C15 | All config and tool input schema-validated at the boundary (Zod)                                            | `src/config.ts`                               | Unit tested                                                                               |
-| C16 | Container: non-root, read-only root filesystem, dropped capabilities, `no-new-privileges`, loopback publish | `Dockerfile`, `compose.yaml`                  | Build, read-only run, health and non-root user CI-verified; mounted audit volume deferred |
-| C17 | Secrets excluded from container build context                                                               | `.dockerignore`                               | Reviewed                                                                                  |
-| C18 | Static analysis and dependency scanning in CI                                                               | `.github/workflows/codeql.yml`, Dependabot    | Runs on push                                                                              |
+| #   | Control                                                                                                                                          | Implementation                                | Assurance                                                                                 |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| C1  | Read-only enforced at the identity layer                                                                                                         | Entra app registration holds only read scopes | Verifiable in your own tenant                                                             |
+| C2  | Delegated per-user auth; no standing credential                                                                                                  | `src/auth/msal.ts`, `src/auth/obo.ts`         | Unit tested                                                                               |
+| C3  | KQL validation — rejects external data access (list in SECURITY.md)                                                                              | `src/guardrails/kqlValidator.ts`              | Unit tested; 100 % line coverage                                                          |
+| C4  | KQL string/comment scanner implementing real Kusto grammar; fails closed on unterminated literals and on line breaks inside single-line literals | `src/guardrails/kqlValidator.ts:200`          | Unit tested; verified by adversarial probe                                                |
+| C5  | Timespan clamped to a configured maximum                                                                                                         | `src/guardrails/kqlValidator.ts`              | Unit tested                                                                               |
+| C6  | Row cap injected when the query is unbounded, including bounds hidden in subqueries                                                              | `src/guardrails/kqlValidator.ts:82`           | Unit tested                                                                               |
+| C7  | Dual-window rate limiting (per-minute and per-hour) below Microsoft's quotas; retries consume capacity                                           | `src/guardrails/rateLimiter.ts`               | Unit tested                                                                               |
+| C8  | Response row and byte caps with explicit truncation notices                                                                                      | `src/guardrails/outputShaper.ts`              | Unit tested; 100 % line coverage                                                          |
+| C9  | API results wrapped in delimited untrusted-data blocks                                                                                           | `src/guardrails/outputShaper.ts`              | Unit tested                                                                               |
+| C10 | Mandatory fail-closed audit; a call that cannot be audited does not return                                                                       | `src/tools/pipeline.ts:104`                   | Unit tested                                                                               |
+| C11 | Audit file `0600`, append-only, size-rotated, flushed on shutdown                                                                                | `src/audit/log.ts`                            | Unit tested                                                                               |
+| C12 | Full inbound bearer validation before any downstream call                                                                                        | `src/auth/bearer.ts`                          | Unit tested                                                                               |
+| C13 | Explicit configured public origin; `Host` and `Origin` validated against it                                                                      | `src/http.ts:72`                              | Unit tested                                                                               |
+| C14 | Continuation URLs validated against an origin allow-list (SSRF control)                                                                          | `src/clients/continuationTokens.ts:71`        | Unit tested                                                                               |
+| C15 | All config and tool input schema-validated at the boundary (Zod)                                                                                 | `src/config.ts`                               | Unit tested                                                                               |
+| C16 | Container: non-root, read-only root filesystem, dropped capabilities, `no-new-privileges`, loopback publish                                      | `Dockerfile`, `compose.yaml`                  | Build, read-only run, health and non-root user CI-verified; mounted audit volume deferred |
+| C17 | Secrets excluded from container build context                                                                                                    | `.dockerignore`                               | Reviewed                                                                                  |
+| C18 | Static analysis and dependency scanning in CI                                                                                                    | `.github/workflows/codeql.yml`, Dependabot    | Runs on push                                                                              |
 
 ## 7. Verification status — what has and has not been tested
 
@@ -167,11 +167,11 @@ Every control below cites a location. Sample them.
 
 - Repository-wide lint and formatting: clean.
 - TypeScript strict compilation (`noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`): clean.
-- **166 unit tests across 22 files: passing.**
-- Coverage: **98.96 % lines overall**; guardrails 99.2 %; audit 97.22 %.
+- **246 unit tests across 22 files: passing.**
+- Coverage: **99.09 % lines overall**; guardrails 99.32 %; audit 97.22 %.
 - Production build: clean.
 - The production image builds and starts in CI with a read-only root filesystem; `/healthz` returns the exact package version and the runtime user is `node` ([CI evidence, 04/09/2026](https://github.com/MaddogWarner/defender-xdr-mcp/actions/runs/33826849251)).
-- Every phase reviewed against the build specification before the next began, including adversarial probing of the KQL validator that found and fixed two exploitable defects prior to v1.0.0.
+- Every phase reviewed against the build specification before the next began, including adversarial probing of the KQL validator that found and fixed two exploitable defects prior to v1.0.0. Later reviews found further validator bypasses, fixed in v1.1.2 (GHSA-v95r-2cwr-x73x) and v1.1.3 (scanner parity with Kusto's lexer: `~~~` literals and comment line terminators).
 
 ### Not verified
 
