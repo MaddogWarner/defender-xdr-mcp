@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { AuthProvider } from '../auth/msal.js';
 import type { MdeClient } from '../clients/mde.js';
 import type { AppConfig } from '../config.js';
+import { recordIdSchema } from './incidents.js';
 import type { ToolPipeline, ToolValidation } from './pipeline.js';
 
 const MDE_SIGN_IN_REQUIRED =
@@ -117,7 +118,7 @@ export function registerVulnerabilityTools(
   registerMdeTool(
     server,
     'get_device',
-    z.object({ id: z.string().min(1).max(512) }),
+    z.object({ id: recordIdSchema }),
     pipeline,
     auth,
     ({ id }: { id: string }) => mde.getDevice(id),

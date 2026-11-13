@@ -75,6 +75,18 @@ describe('loadConfig', () => {
     expect(() =>
       loadConfig({ ...requiredEnvironment, DXM_MAX_RESPONSE_BYTES: '999999999' }),
     ).toThrow(/DXM_MAX_RESPONSE_BYTES.*50000000/);
+    expect(() => loadConfig({ ...requiredEnvironment, DXM_HUNTING_RPM: '46' })).toThrow(
+      /DXM_HUNTING_RPM.*45/,
+    );
+    expect(() => loadConfig({ ...requiredEnvironment, DXM_HUNTING_RPH: '1501' })).toThrow(
+      /DXM_HUNTING_RPH.*1500/,
+    );
+    expect(() => loadConfig({ ...requiredEnvironment, DXM_MDE_RPM: '51' })).toThrow(
+      /DXM_MDE_RPM.*50/,
+    );
+    expect(() => loadConfig({ ...requiredEnvironment, DXM_MDE_RPH: '1501' })).toThrow(
+      /DXM_MDE_RPH.*1500/,
+    );
   });
 
   it('reports an invalid maximum timespan through the configuration error contract', () => {

@@ -3,6 +3,8 @@ import { appendFile, chmod, rename, stat, unlink } from 'node:fs/promises';
 export interface AuditEntry {
   ts: string;
   upn: string | null;
+  // Immutable Entra object ID; the UPN can be renamed.
+  oid?: string;
   tool: string;
   args: Readonly<Record<string, unknown>>;
   rowCount: number;

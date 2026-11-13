@@ -30,6 +30,7 @@ export interface AccessTokenContext {
 
 export interface ConnectionStatus {
   upn: string | undefined;
+  oid?: string;
   scopes: Readonly<Record<TokenResource, readonly string[]>>;
 }
 
@@ -161,6 +162,7 @@ export class DeviceCodeAuth {
   getConnectionStatus(): ConnectionStatus {
     return {
       upn: this.#account?.username,
+      ...(this.#account?.localAccountId ? { oid: this.#account.localAccountId } : {}),
       scopes: {
         graph: this.#results.get('graph')?.grantedScopes ?? [],
         mde: this.#results.get('mde')?.grantedScopes ?? [],

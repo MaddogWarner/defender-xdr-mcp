@@ -26,7 +26,7 @@ const HEALTH_PATH = '/healthz';
 const REQUIRED_SCOPE = 'access_as_user';
 
 interface OboFactory {
-  create(assertion: string, upn: string, inboundExpiresAt: number): AuthProvider;
+  create(assertion: string, upn: string, inboundExpiresAt: number, oid?: string): AuthProvider;
 }
 
 interface FetchHandler {
@@ -44,7 +44,13 @@ export function createHttpFetchHandler(
     if (authInfo?.expiresAt === undefined) {
       throw new Error('Validated HTTP authentication context is missing');
     }
-    const auth = oboFactory.create(authInfo.token, authInfoUpn(authInfo), authInfo.expiresAt);
+    const oid = authInfo.extra?.oid;
+    const auth = oboFactory.create(
+      authInfo.token,
+      authInfoUpn(authInfo),
+      authInfo.expiresAt,
+      typeof oid === 'string' ? oid : undefined,
+    );
     return createDefenderServer(config, auth, sharedState);
   });
 

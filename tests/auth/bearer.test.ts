@@ -220,7 +220,12 @@ describe('HTTP Entra bearer validation', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(create).toHaveBeenCalledWith(bearer, 'analyst@example.com', expect.any(Number));
+    expect(create).toHaveBeenCalledWith(
+      bearer,
+      'analyst@example.com',
+      expect.any(Number),
+      '33333333-3333-4333-8333-333333333333',
+    );
     expect(getToken).not.toHaveBeenCalled();
     expect(getTokenSilently).not.toHaveBeenCalled();
     expect(hasUsableToken).not.toHaveBeenCalled();
@@ -298,6 +303,20 @@ describe('HTTP Entra bearer validation', () => {
     expect(auditEvidence).not.toContain(bearer);
     expect(auditEvidence).not.toContain('graph-downstream-token');
     expect(auditEvidence).not.toContain('raw claims challenge');
+  });
+
+  it('reports a rejected bearer token by failure code only', async () => {
+    const report = vi.fn();
+    const verifier = new EntraTokenVerifier(config, getKey, report);
+
+    await expect(verifier.verifyAccessToken('not-a-jwt')).rejects.toMatchObject({
+      message: 'The bearer token is invalid or expired',
+    });
+    expect(report).toHaveBeenCalledTimes(1);
+    expect(report).toHaveBeenCalledWith(
+      expect.stringMatching(/^Bearer token rejected \(ERR_\w+\)$/),
+    );
+    expect(JSON.stringify(report.mock.calls)).not.toContain('not-a-jwt');
   });
 
   it('serves protected-resource metadata without authentication', async () => {

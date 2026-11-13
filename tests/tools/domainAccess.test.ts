@@ -4,6 +4,7 @@ import {
   alertStatusSchema,
   graphSeveritySchema,
   incidentStatusSchema,
+  recordIdSchema,
   validateGraphAccess,
 } from '../../src/tools/incidents.js';
 import {
@@ -28,6 +29,14 @@ describe('domain tool authentication gates', () => {
       reason:
         'Defender for Endpoint requires interactive sign-in. Run `node dist/index.js --sign-in` in a terminal, or call get_connection_status, then retry.',
     });
+  });
+
+  it.each(['.', '..'])('rejects the dot path segment %j as a record ID', (id) => {
+    expect(recordIdSchema.safeParse(id).success).toBe(false);
+  });
+
+  it.each(['1', 'da637-1_2', '.hidden', 'a..b', '...'])('accepts the record ID %j', (id) => {
+    expect(recordIdSchema.safeParse(id).success).toBe(true);
   });
 
   it('enforces Microsoft Graph lowercase severity and endpoint-specific statuses', () => {

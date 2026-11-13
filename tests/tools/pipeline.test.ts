@@ -12,7 +12,7 @@ describe('ToolPipeline', () => {
   it('centrally shapes output and audits complete success metadata', async () => {
     const entries: ToolAuditEntry[] = [];
     const pipeline = new ToolPipeline(
-      () => 'analyst@example.com',
+      () => ({ upn: 'analyst@example.com', oid: 'oid-1' }),
       (entry) => {
         entries.push(entry);
         return Promise.resolve();
@@ -31,6 +31,7 @@ describe('ToolPipeline', () => {
     expect(outcome.ok && outcome.output.text).toContain('BEGIN UNTRUSTED DEFENDER TELEMETRY');
     expect(entries[0]).toMatchObject({
       upn: 'analyst@example.com',
+      oid: 'oid-1',
       tool: 'run_hunting_query',
       args: { query: 'DeviceInfo' },
       rowCount: 1,
@@ -40,7 +41,11 @@ describe('ToolPipeline', () => {
 
   it('audits Microsoft error codes before propagating failures', async () => {
     const audit = vi.fn<(_entry: ToolAuditEntry) => Promise<void>>().mockResolvedValue(undefined);
-    const pipeline = new ToolPipeline(() => 'analyst@example.com', audit, shapeConfig);
+    const pipeline = new ToolPipeline(
+      () => ({ upn: 'analyst@example.com', oid: 'oid-1' }),
+      audit,
+      shapeConfig,
+    );
     await expect(
       pipeline.run({
         tool: 'run_hunting_query',
@@ -60,7 +65,7 @@ describe('ToolPipeline', () => {
 
   it('preserves validation_failed for a validator rejection', async () => {
     const audit = vi.fn<(_entry: ToolAuditEntry) => Promise<void>>().mockResolvedValue(undefined);
-    const pipeline = new ToolPipeline(() => undefined, audit, shapeConfig);
+    const pipeline = new ToolPipeline(() => ({ upn: undefined }), audit, shapeConfig);
     await expect(
       pipeline.run({
         tool: 'run_hunting_query',
@@ -77,7 +82,7 @@ describe('ToolPipeline', () => {
 
   it('preserves validation_error for a throwing validator', async () => {
     const audit = vi.fn<(_entry: ToolAuditEntry) => Promise<void>>().mockResolvedValue(undefined);
-    const pipeline = new ToolPipeline(() => undefined, audit, shapeConfig);
+    const pipeline = new ToolPipeline(() => ({ upn: undefined }), audit, shapeConfig);
     const failure = new Error('validator crashed');
     await expect(
       pipeline.run({
@@ -97,7 +102,7 @@ describe('ToolPipeline', () => {
 
   it('audits asynchronous authentication failures inside validation', async () => {
     const audit = vi.fn<(_entry: ToolAuditEntry) => Promise<void>>().mockResolvedValue(undefined);
-    const pipeline = new ToolPipeline(() => undefined, audit, shapeConfig);
+    const pipeline = new ToolPipeline(() => ({ upn: undefined }), audit, shapeConfig);
     const failure = new Error('keystore unavailable');
     await expect(
       pipeline.run({
@@ -115,7 +120,7 @@ describe('ToolPipeline', () => {
 
   it('returns a model-readable reason for an expired continuation token after auditing it', async () => {
     const audit = vi.fn<(_entry: ToolAuditEntry) => Promise<void>>().mockResolvedValue(undefined);
-    const pipeline = new ToolPipeline(() => undefined, audit, shapeConfig);
+    const pipeline = new ToolPipeline(() => ({ upn: undefined }), audit, shapeConfig);
     await expect(
       pipeline.run({
         tool: 'list_incidents',
@@ -135,7 +140,7 @@ describe('ToolPipeline', () => {
 
   it('returns an explicit sign-in action when silent reacquisition is interaction-required', async () => {
     const audit = vi.fn<(_entry: ToolAuditEntry) => Promise<void>>().mockResolvedValue(undefined);
-    const pipeline = new ToolPipeline(() => undefined, audit, shapeConfig);
+    const pipeline = new ToolPipeline(() => ({ upn: undefined }), audit, shapeConfig);
     await expect(
       pipeline.run({
         tool: 'list_vulnerabilities',
@@ -153,7 +158,11 @@ describe('ToolPipeline', () => {
 
   it('returns and audits an OBO failure raised while validating resource access', async () => {
     const audit = vi.fn<(_entry: ToolAuditEntry) => Promise<void>>().mockResolvedValue(undefined);
-    const pipeline = new ToolPipeline(() => 'analyst@example.com', audit, shapeConfig);
+    const pipeline = new ToolPipeline(
+      () => ({ upn: 'analyst@example.com', oid: 'oid-1' }),
+      audit,
+      shapeConfig,
+    );
     const failure = new OnBehalfOfExchangeError('mde', 'invalid_grant');
 
     await expect(
@@ -172,7 +181,11 @@ describe('ToolPipeline', () => {
 
   it('returns and audits an OBO failure raised while executing a tool', async () => {
     const audit = vi.fn<(_entry: ToolAuditEntry) => Promise<void>>().mockResolvedValue(undefined);
-    const pipeline = new ToolPipeline(() => 'analyst@example.com', audit, shapeConfig);
+    const pipeline = new ToolPipeline(
+      () => ({ upn: 'analyst@example.com', oid: 'oid-1' }),
+      audit,
+      shapeConfig,
+    );
     const failure = new OnBehalfOfExchangeError('graph', 'unauthorized_client');
 
     await expect(
@@ -197,7 +210,7 @@ describe('ToolPipeline', () => {
     const audit = vi
       .fn<(_entry: ToolAuditEntry) => Promise<void>>()
       .mockRejectedValue(auditFailure);
-    const pipeline = new ToolPipeline(() => undefined, audit, shapeConfig);
+    const pipeline = new ToolPipeline(() => ({ upn: undefined }), audit, shapeConfig);
     await expect(
       pipeline.run({
         tool: 'get_incident',

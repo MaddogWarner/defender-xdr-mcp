@@ -11,7 +11,7 @@ Bring your own AI to your Defender telemetry. If your org runs Microsoft 365 E5 
 
 > **Read this before you deploy — where your data actually goes.** This server does not transmit telemetry to any third party. Your **AI client** does. The entire purpose of an MCP server is to feed tool results to a model, so whatever Defender data a tool returns is sent by your AI client to whichever model provider it uses (Anthropic, OpenAI, Google, or a model you host yourself). Self-hosting this server removes one hop, not that one. Assess the AI client and its provider as part of the same decision — see [`docs/security-assessment.md`](docs/security-assessment.md), risk **R1**.
 >
-> **Verification status (13/11/2026).** v1.1.3 has passed lint, strict typecheck, 246 unit tests, 99.32 % guardrail line coverage, and CI container build/start/health/non-root checks. It **has never been run against a live Microsoft 365 tenant**, and the mounted-volume audit-write check remains deferred. Those gates are documented in [`docs/live-test-runbook.md`](docs/live-test-runbook.md). Treat this as pre-production software until that runbook is completed and signed off.
+> **Verification status (14/11/2026).** v1.1.4 has passed lint, strict typecheck, 255 unit tests, 99.32 % guardrail line coverage, and CI container build/start/health/non-root checks. It **has never been run against a live Microsoft 365 tenant**, and the mounted-volume audit-write check remains deferred. Those gates are documented in [`docs/live-test-runbook.md`](docs/live-test-runbook.md). Treat this as pre-production software until that runbook is completed and signed off.
 >
 > **Disclaimer:** this is an independent open-source project. It is not affiliated with, endorsed by, or supported by Microsoft. "Microsoft Defender" is a trademark of Microsoft Corporation.
 
@@ -165,14 +165,14 @@ If you need to put this through a security or risk assessment, start with **[doc
 | `DXM_MAX_ROWS`                               | `1000`               | Max rows returned to the AI per call; Microsoft Graph list endpoints may impose a lower page-size maximum                    |
 | `DXM_MAX_RESPONSE_BYTES`                     | `262144`             | Max serialised response size; hard ceiling `50000000`                                                                        |
 | `DXM_HUNTING_RPM` / `DXM_HUNTING_RPH`        | `40` / `1200`        | Per-process Graph budget for hunting, incidents and alerts; Microsoft's hunting cap is approximately 45/min per tenant       |
-| `DXM_MDE_RPM` / `DXM_MDE_RPH`                | `45` / `1350`        | Defender API rate limits (Microsoft's caps ≈ 50/min, 1,500/hr)                                                               |
+| `DXM_MDE_RPM` / `DXM_MDE_RPH`                | `45` / `1350`        | Defender API rate limits (Microsoft's caps ≈ 50/min, 1,500/hr; higher values are rejected)                                   |
 | `DXM_AUDIT_LOG_PATH`                         | `./audit.jsonl`      | Append-only audit log location                                                                                               |
 | `DXM_AUDIT_MAX_MB` / `DXM_AUDIT_KEEP`        | `256` / `5`          | Audit log rotation: size threshold and rotated files kept                                                                    |
 | `DXM_HTTP_HOST` / `DXM_HTTP_PORT`            | `127.0.0.1` / `3020` | HTTP mode bind                                                                                                               |
 | `DXM_PUBLIC_URL`                             | _(HTTP required)_    | Public HTTPS origin used for OAuth discovery and Host/Origin validation; loopback HTTP is allowed only for local development |
 | `DXM_CLIENT_SECRET` / `DXM_CLIENT_CERT_PATH` | —                    | HTTP mode only, for the OBO exchange                                                                                         |
 
-Microsoft's hunting quota is tenant-wide, while local stdio limiting is per server process. As a starting point, set each analyst's `DXM_HUNTING_RPM` below `45 ÷ concurrent stdio analysts` and leave headroom for the Defender portal and other integrations. HTTP mode uses one shared process-wide budget. Incidents and alerts consume the same `DXM_HUNTING_*` budget. Microsoft Graph list endpoints also enforce their own page-size maximums; a `DXM_MAX_ROWS` value above an endpoint's limit can produce HTTP 400 rather than a larger page.
+Microsoft's hunting quota is tenant-wide, while local stdio limiting is per server process. Values above 45/min or 1,500/hr are rejected at startup. As a starting point, set each analyst's `DXM_HUNTING_RPM` below `45 ÷ concurrent stdio analysts` and leave headroom for the Defender portal and other integrations. HTTP mode uses one shared process-wide budget. Incidents and alerts consume the same `DXM_HUNTING_*` budget. Microsoft Graph list endpoints also enforce their own page-size maximums; a `DXM_MAX_ROWS` value above an endpoint's limit can produce HTTP 400 rather than a larger page.
 
 ## Security model, in brief
 
