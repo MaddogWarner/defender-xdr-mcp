@@ -100,7 +100,7 @@ function bracketedCallName(token: string): string {
   const parts: string[] = [];
   // Reuse the same scanner for comments and adjacent literals in quoted names.
   stripStringsAndComments(token, (literal) => {
-    if (literal.startsWith('```')) {
+    if (MULTILINE_QUOTES.some((quote) => literal.startsWith(quote))) {
       parts.push(literal.slice(3, -3));
       return;
     }
@@ -183,6 +183,11 @@ function outerResultStatement(query: string): string {
 
 type StripResult = { ok: true; query: string } | { ok: false; reason: string };
 
+// Kusto accepts either chord for multi-line literals (Kusto.Language KustoFacts).
+const MULTILINE_QUOTES = ['```', '~~~'] as const;
+// Kusto ends a line comment at any of these (Kusto.Language TextFacts).
+const COMMENT_LINE_BREAKS = new Set(['\r', '\n', '\u2028', '\u2029']);
+
 type ScannerState =
   | 'code'
   | 'line-comment'
@@ -200,6 +205,7 @@ function stripStringsAndComments(
   let index = 0;
   let state: ScannerState = 'code';
   let literalIndex = 0;
+  let multilineQuote = '';
 
   while (index < query.length) {
     const current = query[index] ?? '';
@@ -211,8 +217,10 @@ function stripStringsAndComments(
         index += 2;
         continue;
       }
-      if (query.startsWith('```', index)) {
+      const openingQuote = MULTILINE_QUOTES.find((quote) => query.startsWith(quote, index));
+      if (openingQuote !== undefined) {
         literalIndex = index;
+        multilineQuote = openingQuote;
         state = 'multiline';
         result += '   ';
         index += 3;
@@ -232,7 +240,7 @@ function stripStringsAndComments(
     }
 
     if (state === 'line-comment') {
-      if (current === '\n') {
+      if (COMMENT_LINE_BREAKS.has(current)) {
         state = 'code';
         result += '\n';
       } else {
@@ -243,7 +251,7 @@ function stripStringsAndComments(
     }
 
     if (state === 'multiline') {
-      if (query.startsWith('```', index)) {
+      if (query.startsWith(multilineQuote, index)) {
         onLiteral?.(query.slice(literalIndex, index + 3));
         state = 'code';
         result += '   ';
@@ -257,7 +265,11 @@ function stripStringsAndComments(
 
     const quote = state.endsWith('single') ? "'" : '"';
     const verbatim = state.startsWith('verbatim');
-    if (!verbatim && current === '\\' && index + 1 < query.length) {
+    // Kusto ends a single-line literal at CR or LF, so what follows would run as
+    // code. Stop here and fail closed as an unterminated literal.
+    if (current === '\r' || current === '\n') break;
+    const escapesNext = current === '\\' && next !== '\r' && next !== '\n';
+    if (!verbatim && escapesNext && index + 1 < query.length) {
       result += mask(query.slice(index, index + 2));
       index += 2;
       continue;
